@@ -1,0 +1,273 @@
+/* アニメーション用 */
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* メインコンテナの余白調整 */
+#app-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 10px;
+}
+
+:root {
+    --primary-color: #333;
+    --accent-color: #005014;
+    --bg-color: #f4f4f4;
+    --text-color: #333;
+    --border-radius: 8px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+/* ヘッダー */
+header {
+    background: #fff;
+    padding: 10px 20px;
+    border-bottom: 3px solid var(--accent-color);
+    margin-bottom: 20px;
+}
+.header-inner {
+    max-width: 800px;
+    margin: 0 auto;
+}
+.university {
+    font-size: 0.8rem;
+    color: #666;
+}
+h1 {
+    margin: 5px 0 0;
+    font-size: 1.2rem;
+}
+
+/* コンテナ */
+main {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 10px;
+}
+
+/* 画面切り替え制御 */
+.screen {
+    display: none; /* デフォルト非表示 */
+    background: #fff;
+    padding: 20px;
+    border-radius: var(--border-radius);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    min-height: 400px;
+}
+.screen.active {
+    display: block; /* アクティブのみ表示 */
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* メニューボタン・グリッド */
+.menu-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+}
+.row {
+    display: flex;
+    gap: 15px;
+}
+.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.menu-btn {
+    flex: 1;
+    padding: 30px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+    text-align: center;
+}
+.menu-btn:hover {
+    background: #e9ecef;
+}
+.menu-btn.primary {
+    background: #555;
+    color: #fff;
+}
+.menu-btn.large-text {
+    font-size: 1.3rem;
+    padding: 50px 20px;
+}
+.sub-text {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: normal;
+    margin-top: 5px;
+    color: #666;
+}
+
+/* フォーム要素 */
+.form-group {
+    margin-bottom: 15px;
+}
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+input[type="text"], input[type="date"],input[type="number"], select, textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 1rem;
+}
+.input-with-btn {
+    display: flex;
+    gap: 10px;
+}
+.nfc-btn {
+    background: #ddd;
+    border: none;
+    padding: 0 15px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+/* ナビゲーションボタン */
+.nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 30px;
+    border-top: 1px solid #eee;
+    padding-top: 20px;
+}
+button.back-btn {
+    background: #fff;
+    border: 1px solid #999;
+    padding: 10px 30px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+button.next-btn, button.primary-btn {
+    background: var(--accent-color);
+    color: #fff;
+    border: none;
+    padding: 10px 30px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* テーブル */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+.data-table th, .data-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+.data-table th {
+    background-color: #f2f2f2;
+}
+
+/* 確認画面用 */
+.info-row {
+    border-bottom: 1px solid #eee;
+    padding: 10px 0;
+    display: flex;
+}
+.info-label {
+    width: 40%;
+    font-weight: bold;
+    color: #555;
+}
+
+/* --- フィルタボタン周り --- */
+.filters-container {
+    margin-bottom: 15px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    padding: 6px 14px;
+    border: 1px solid #ccc;
+    background: #fff;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    color: #555;
+}
+
+.filter-btn:hover {
+    background: #f0f0f0;
+}
+
+/* 選択中のスタイル（濃い色にして目立たせる） */
+.filter-btn.active {
+    background: #333;
+    color: #fff;
+    border-color: #333;
+    font-weight: bold;
+}
+
+/* --- テーブル内のステータスバッジ --- */
+.status-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    display: inline-block;
+    min-width: 60px;
+    text-align: center;
+}
+
+/* 状態ごとの色定義 */
+.badge-normal {
+    background-color: #e3f2fd; /* 薄い青 */
+    color: #1565c0;
+}
+.badge-warn {
+    background-color: #fff9c4; /* 薄い黄色 */
+    color: #fbc02d;
+    color: #827717; /* 文字は見やすく濃い色で */
+}
+.badge-error {
+    background-color: #ffebee; /* 薄い赤 */
+    color: #c62828;
+}
+.badge-gray {
+    background-color: #eeeeee; /* グレー */
+    color: #616161;
+}

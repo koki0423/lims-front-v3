@@ -1,0 +1,58 @@
+<div class="screen-content">
+    <h2>検索結果</h2>
+
+
+    <form id="form-search-result">
+        <div class="menu-grid two-col" style="gap: 20px;">
+            <div>
+                <div class="form-group">
+                    <label>備品名</label>
+                    <input type="text" id="disp-name" readonly style="background:#f9f9f9; color:#555;">
+                </div>
+                <div class="form-group">
+                    <label>メーカー</label>
+                    <input type="text" id="disp-maker" readonly style="background:#f9f9f9; color:#555;">
+                </div>
+                <div class="form-group">
+                    <label>型番</label>
+                    <input type="text" id="disp-model" readonly style="background:#f9f9f9; color:#555;">
+                </div>
+                <div class="form-group">
+                    <label>シリアル番号</label>
+                    <input type="text" id="disp-serial" readonly style="background:#f9f9f9; color:#555;">
+                </div>
+                <div class="form-group">
+                    <label>備品ジャンル</label>
+                    <input type="text" id="disp-genre" readonly style="background:#f9f9f9; color:#555;">
+                </div>
+            </div>
+
+            <div>
+                <div class="form-group">
+                    <label>標準保管場所 または 所有者</label>
+                    <input type="text" id="disp-location" readonly style="background:#f9f9f9; color:#555;">
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label> <input type="text" disabled style="background:transparent; border:none;">
+                </div>
+                <div class="form-group">
+                    <label>購入日*</label>
+                    <input type="text" id="disp-date" readonly style="background:#f9f9f9; color:#555;">
+                </div>
+                <div class="form-group">
+                    <label>登録者</label>
+                    <input type="text" id="disp-registrant" readonly style="background:#f9f9f9; color:#555;">
+                </div>
+                <div class="form-group">
+                    <label>備考</label>
+                    <input type="text" id="disp-remarks" readonly style="background:#f9f9f9; color:#555;">
+                </div>
+            </div>
+        </div>
+
+        <div class="nav-buttons" style="margin-top: 20px;">
+            <button type="button" class="back-btn" onclick="SearchController.backToSearch()"
+                style="width: 200px;">戻る</button>
+        </div>
+    </form>
+</div>

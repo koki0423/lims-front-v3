@@ -1,0 +1,15 @@
+<div class="screen-content">
+    <h2>返却 > 備品特定</h2>
+    <div class="form-group">
+        <label>備品番号 または 貸出先</label>
+        <div class="input-with-btn">
+            <input type="text" id="return-search-query" placeholder="OFS-xxxx または ユーザーID">
+            <button class="nfc-btn">NFC</button>
+        </div>
+        <p style="font-size:0.8em; color:#666; margin-top:5px;">※デモ用: 「OFS-20251101-0001」でヒットします</p>
+    </div>
+    <div class="nav-buttons">
+        <button class="back-btn" onclick="Router.to('return-menu')">戻る</button>
+        <button class="primary-btn" onclick="LendReturnController.searchLending()">参照</button>
+    </div>
+</div>

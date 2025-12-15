@@ -1,0 +1,30 @@
+<div class="screen-content">
+    <h2>備品参照・編集</h2>
+    
+    <div class="filters-container">
+        <label>絞り込み:</label>
+        <button class="filter-btn" data-status="正常" onclick="ItemListController.toggleFilter('正常')">正常</button>
+        <button class="filter-btn" data-status="故障" onclick="ItemListController.toggleFilter('故障')">故障</button>
+        <button class="filter-btn" data-status="修理中" onclick="ItemListController.toggleFilter('修理中')">修理中</button>
+        <button class="filter-btn" data-status="貸出中" onclick="ItemListController.toggleFilter('貸出中')">貸出中</button>
+        <button class="filter-btn" data-status="廃棄済み" onclick="ItemListController.toggleFilter('廃棄済み')">廃棄済み</button>
+        <button class="filter-btn" data-status="紛失" onclick="ItemListController.toggleFilter('紛失')">紛失</button>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>備品番号</th>
+                <th>備品名</th>
+                <th>数量</th>
+                <th>状態</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="item-list-body">
+            </tbody>
+    </table>
+    <div class="nav-buttons">
+        <button class="back-btn" onclick="Router.to('main-menu')">戻る</button>
+    </div>
+</div>
