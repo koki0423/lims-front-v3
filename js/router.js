@@ -4,18 +4,19 @@ import { initItemList } from '../modules/item_list/logic.js';
 import { initLendReturn } from '../modules/lend_return/logic.js';
 import { initSearch } from '../modules/search/logic.js';
 import { initComplete } from '../modules/common/logic.js';
+import '../modules/admin/logic.js';
 
 // ルート定義: 画面IDとファイルパス、初期化処理の紐付け
 const routes = {
     'main-menu': { path: 'modules/main/menu.html', title: 'メインメニュー' },
 
-    // === 新規登録 (既存) ===
+    // === 新規登録 ===
     'reg-select': { path: 'modules/registration/step1.html', title: '新規登録' },
     'reg-input-1': { path: 'modules/registration/step2.html', title: '新規登録 > 基本', init: () => initRegistration('step2') },
     'reg-input-2': { path: 'modules/registration/step3.html', title: '新規登録 > 詳細', init: () => initRegistration('step3') },
     'reg-confirm': { path: 'modules/registration/confirm.html', title: '新規登録 > 確認', init: () => initRegistration('confirm') },
 
-    // === 廃棄 (新規追加) ===
+    // === 廃棄 ===
     'disposal-top': { path: 'modules/disposal/top.html', title: '廃棄メニュー' },
     'disposal-input': { path: 'modules/disposal/input.html', title: '廃棄登録', init: () => initDisposal('input') },
     'disposal-confirm': { path: 'modules/disposal/confirm.html', title: '廃棄確認', init: () => initDisposal('confirm') },
@@ -69,6 +70,11 @@ const routes = {
         title: '完了',
         init: () => initComplete()
     },
+
+    // === 管理者機能 ===
+    'admin-login':    { path: 'modules/admin/login.html',     title: '管理者ログイン' },
+    'admin-main':     { path: 'modules/admin/main_menu.html', title: '管理者メニュー' },
+    'admin-register': { path: 'modules/admin/register.html',  title: '管理者追加登録' },
 
 };
 
