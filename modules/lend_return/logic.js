@@ -11,7 +11,7 @@ const returnState = {
 };
 
 // === モックデータ: 現在貸出中のリスト ===
-// 返却機能のテスト用データです
+// 返却機能のテスト用データ
 const mockActiveLendings = [
     {
         lendingId: '01K5BX9WF8TMF40YKJWF09HPZC',

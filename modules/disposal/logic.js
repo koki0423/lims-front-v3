@@ -7,11 +7,21 @@ const disposalState = {
 
 // 履歴データのモック（サーバーから取得するデータの代わり）
 const mockHistory = [
-    { id: 'OFS-20251101-001',name:"MacBook Air M2" ,reason: '画面破損', date: '2025-11-02', user: 'AB12345' },
-    { id: 'OFS-20251015-005',name:"HDMIケーブル" , reason: '老朽化', date: '2025-10-30', user: 'CD67890' }
+    { id: 'OFS-20251101-001', name: "MacBook Air M2", reason: '画面破損', date: '2025-11-02', user: 'AB12345' },
+    { id: 'OFS-20251015-005', name: "HDMIケーブル", reason: '老朽化', date: '2025-10-30', user: 'CD67890' }
 ];
 
 window.DisposalController = {
+
+    saveInput() {
+        const form = document.getElementById('form-disposal');
+        const formData = new FormData(form);
+        for (let [key, val] of formData.entries()) {
+            disposalState.data[key] = val;
+        }
+        console.log('Input Data:', disposalState.data);
+    },
+
     // 入力画面 -> 確認画面
     toConfirm() {
         const form = document.getElementById('form-disposal');
@@ -35,11 +45,18 @@ window.DisposalController = {
 // 画面初期化処理
 export function initDisposal(view) {
     if (view === 'input') {
-        // 今日の日付を自動セット [cite: 187]
-        const dateInput = document.querySelector('input[name="date"]');
-        if (dateInput) {
-            const today = new Date().toISOString().split('T')[0];
-            dateInput.value = today;
+        const form = document.getElementById('form-disposal');
+        // Stateにデータがあるかチェック
+        if (Object.keys(disposalState.data).length > 0) {
+            // データがあるなら復元（戻るボタンで来た場合など）
+            restoreFormData(form, disposalState.data);
+        } else {
+            // データがないなら初期値をセット（初回アクセス時）
+            const dateInput = form.querySelector('input[name="date"]');
+            if (dateInput) {
+                const today = new Date().toISOString().split('T')[0];
+                dateInput.value = today;
+            }
         }
     }
     else if (view === 'confirm') {
@@ -67,4 +84,13 @@ export function initDisposal(view) {
             `).join('');
         }
     }
+}
+
+function restoreFormData(form, data) {
+    Object.keys(data).forEach(key => {
+        const input = form.querySelector(`[name="${key}"]`);
+        if (input) {
+            input.value = data[key];
+        }
+    });
 }

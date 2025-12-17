@@ -13,7 +13,7 @@
             <label>登録者(学生証)</label>
             <div class="input-with-btn">
                 <input type="text" name="user" placeholder="例:AB12345" required>
-                <button type="button" class="nfc-btn">NFC</button>
+                <button type="button" class="nfc-btn">NFC入力</button>
             </div>
         </div>
         <div class="form-group">
@@ -26,7 +26,7 @@
         </div>
     </form>
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.back()">戻る</button>
+        <button class="back-btn" onclick="Router.to('disposal-top')">戻る</button>
         <button class="next-btn" onclick="DisposalController.toConfirm()">次へ</button>
     </div>
 </div>

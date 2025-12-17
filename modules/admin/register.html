@@ -1,0 +1,27 @@
+<div class="screen-content">
+    <h2>管理者追加登録画面</h2>
+
+    <p id="register-error-msg"
+        style="color: red; font-size: 0.9rem; text-align: center; margin-bottom: 20px; min-height: 1.2em;">
+    </p>
+
+    <form id="form-admin-reg">
+        <div class="form-group">
+            <label>学籍番号 (NFC入力のみ)</label>
+            <div class="input-with-btn">
+                <input type="text" name="adminId" placeholder="スキャンしてください" required>
+                <button type="button" class="nfc-btn" onclick="alert('NFCスキャン(モック)')">NFCで入力</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>パスワード</label>
+            <input type="password" name="password"
+                style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px;" required>
+        </div>
+    </form>
+
+    <div class="nav-buttons">
+        <button class="back-btn" onclick="Router.to('admin-main')">戻る</button>
+        <button class="primary-btn" onclick="AdminController.submitRegister()">登録実行</button>
+    </div>
+</div>

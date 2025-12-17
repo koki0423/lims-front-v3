@@ -105,7 +105,6 @@ function renderConfirm() {
 
     const typeLabel = regState.type === 'individual' ? '個別管理' : '一括管理';
 
-    // PDFのデザインに合わせた項目表示
     display.innerHTML = `
         <div class="info-row"><span class="info-label">管理方法</span><span>${typeLabel}</span></div>
         <div class="info-row"><span class="info-label">備品名</span><span>${regState.data.itemName || ''}</span></div>
