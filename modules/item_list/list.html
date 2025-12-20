@@ -1,15 +1,16 @@
 <div class="screen-content">
     <h2>備品参照・編集</h2>
     
-    <div class="filters-container">
-        <label>絞り込み:</label>
-        <button class="filter-btn" data-status="正常" onclick="ItemListController.toggleFilter('正常')">正常</button>
-        <button class="filter-btn" data-status="故障" onclick="ItemListController.toggleFilter('故障')">故障</button>
-        <button class="filter-btn" data-status="修理中" onclick="ItemListController.toggleFilter('修理中')">修理中</button>
-        <button class="filter-btn" data-status="貸出中" onclick="ItemListController.toggleFilter('貸出中')">貸出中</button>
-        <button class="filter-btn" data-status="廃棄済み" onclick="ItemListController.toggleFilter('廃棄済み')">廃棄済み</button>
-        <button class="filter-btn" data-status="紛失" onclick="ItemListController.toggleFilter('紛失')">紛失</button>
-    </div>
+<div class="filters-container">
+    <label>絞り込み:</label>
+    <button class="filter-btn" data-status="1" onclick="ItemListController.toggleFilter('1')">正常</button>
+    <button class="filter-btn" data-status="2" onclick="ItemListController.toggleFilter('2')">故障</button>
+    <button class="filter-btn" data-status="3" onclick="ItemListController.toggleFilter('3')">修理中</button>
+    <button class="filter-btn" data-status="4" onclick="ItemListController.toggleFilter('4')">貸出中</button>
+    <button class="filter-btn" data-status="5" onclick="ItemListController.toggleFilter('5')">廃棄済み</button>
+    <button class="filter-btn" data-status="6" onclick="ItemListController.toggleFilter('6')">紛失</button>
+</div>
+
 
     <table class="data-table">
         <thead>

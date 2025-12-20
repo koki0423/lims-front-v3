@@ -22,6 +22,15 @@ window.DisposalController = {
         console.log('Input Data:', disposalState.data);
     },
 
+    // モック用: NFCボタンの挙動
+    mockNfcRead() {
+        const input = document.querySelector('input[name="registrant"]');
+        if (input) {
+            input.value = "AB12345 (NFC)";
+        }
+        alert('NFCを読み取りました（モック）');
+    },
+
     // 入力画面 -> 確認画面
     toConfirm() {
         const form = document.getElementById('form-disposal');

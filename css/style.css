@@ -4,8 +4,15 @@
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* メインコンテナの余白調整 */
@@ -42,14 +49,17 @@ header {
     border-bottom: 3px solid var(--accent-color);
     margin-bottom: 20px;
 }
+
 .header-inner {
     max-width: 800px;
     margin: 0 auto;
 }
+
 .university {
     font-size: 0.8rem;
     color: #666;
 }
+
 h1 {
     margin: 5px 0 0;
     font-size: 1.2rem;
@@ -64,21 +74,31 @@ main {
 
 /* 画面切り替え制御 */
 .screen {
-    display: none; /* デフォルト非表示 */
+    display: none;
+    /* デフォルト非表示 */
     background: #fff;
     padding: 20px;
     border-radius: var(--border-radius);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     min-height: 400px;
 }
+
 .screen.active {
-    display: block; /* アクティブのみ表示 */
+    display: block;
+    /* アクティブのみ表示 */
     animation: fadeIn 0.3s ease;
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(5px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* メニューボタン・グリッド */
@@ -88,10 +108,12 @@ main {
     gap: 15px;
     margin-top: 20px;
 }
+
 .row {
     display: flex;
     gap: 15px;
 }
+
 .two-col {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -110,17 +132,21 @@ main {
     transition: background 0.2s;
     text-align: center;
 }
+
 .menu-btn:hover {
     background: #e9ecef;
 }
+
 .menu-btn.primary {
     background: #555;
     color: #fff;
 }
+
 .menu-btn.large-text {
     font-size: 1.3rem;
     padding: 50px 20px;
 }
+
 .sub-text {
     display: block;
     font-size: 0.8rem;
@@ -133,29 +159,49 @@ main {
 .form-group {
     margin-bottom: 15px;
 }
+
 label {
     display: block;
     margin-bottom: 5px;
     font-weight: bold;
     font-size: 0.9rem;
 }
-input[type="text"], input[type="date"],input[type="number"], select, textarea {
+
+input[type="text"],
+input[type="date"],
+input[type="number"],
+select,
+textarea {
     width: 100%;
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 5px;
     font-size: 1rem;
 }
+
 .input-with-btn {
     display: flex;
     gap: 10px;
 }
+
 .nfc-btn {
     background: #ddd;
     border: none;
     padding: 0 15px;
     border-radius: 5px;
     cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.reader-btn {
+    background: #ddd;
+    border: none;
+    padding: 0 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 /* ナビゲーションボタン */
@@ -166,6 +212,7 @@ input[type="text"], input[type="date"],input[type="number"], select, textarea {
     border-top: 1px solid #eee;
     padding-top: 20px;
 }
+
 button.back-btn {
     background: #fff;
     border: 1px solid #999;
@@ -173,7 +220,9 @@ button.back-btn {
     border-radius: 5px;
     cursor: pointer;
 }
-button.next-btn, button.primary-btn {
+
+button.next-btn,
+button.primary-btn {
     background: var(--accent-color);
     color: #fff;
     border: none;
@@ -189,11 +238,14 @@ button.next-btn, button.primary-btn {
     border-collapse: collapse;
     margin-top: 20px;
 }
-.data-table th, .data-table td {
+
+.data-table th,
+.data-table td {
     border: 1px solid #ddd;
     padding: 8px;
     text-align: left;
 }
+
 .data-table th {
     background-color: #f2f2f2;
 }
@@ -204,6 +256,7 @@ button.next-btn, button.primary-btn {
     padding: 10px 0;
     display: flex;
 }
+
 .info-label {
     width: 40%;
     font-weight: bold;
@@ -255,19 +308,42 @@ button.next-btn, button.primary-btn {
 
 /* 状態ごとの色定義 */
 .badge-normal {
-    background-color: #e3f2fd; /* 薄い青 */
+    background-color: #e3f2fd;
+    /* 薄い青 */
     color: #1565c0;
 }
+
 .badge-warn {
-    background-color: #fff9c4; /* 薄い黄色 */
+    background-color: #fff9c4;
+    /* 薄い黄色 */
     color: #fbc02d;
-    color: #827717; /* 文字は見やすく濃い色で */
+    color: #827717;
+    /* 文字は見やすく濃い色で */
 }
+
 .badge-error {
-    background-color: #ffebee; /* 薄い赤 */
+    background-color: #ffebee;
+    /* 薄い赤 */
     color: #c62828;
 }
+
 .badge-gray {
-    background-color: #eeeeee; /* グレー */
+    background-color: #eeeeee;
+    /* グレー */
     color: #616161;
+}
+
+/* テーブルセルの基本スタイル上書き */
+.data-table td {
+    border-bottom: 1px solid #eee;
+    /* 薄い区切り線 */
+    vertical-align: middle;
+}
+
+/* フィルタボタンのアクティブ状態をわかりやすく */
+.filter-btn.active {
+    background-color: #333;
+    color: #fff;
+    border-color: #333;
+    font-weight: bold;
 }

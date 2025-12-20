@@ -22,7 +22,7 @@ const routes = {
     'disposal-confirm': { path: 'modules/disposal/confirm.html', title: '廃棄確認', init: () => initDisposal('confirm') },
     'disposal-history': { path: 'modules/disposal/history.html', title: '廃棄履歴', init: () => initDisposal('history') },
 
-    // === 備品参照 (新規追加) ===
+    // === 備品参照 ===
     'item-list': { path: 'modules/item_list/list.html', title: '備品一覧', init: () => initItemList() },
 
     // === 貸出・返却 ===
