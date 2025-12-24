@@ -175,9 +175,7 @@ function renderList() {
                 </td>
                 <td style="text-align:center; padding: 12px 5px;">
                     <button class="sm-btn" onclick="ItemListController.edit('${mgmtNum}')">編集</button>
-                </td>
-                <td style="text-align:center; padding: 12px 5px;">
-                    <button class="sm-btn" onclick="ItemListController.lend('${item.asset_id}')">貸出</button>
+                    <button class="sm-btn" onclick="ItemListController.lend('${mgmtNum}')">貸出</button>
                 </td>
             </tr>
         `;
