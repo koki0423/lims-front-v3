@@ -7,15 +7,16 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 
+<!-- 先に encoding-japanese をグローバル読み込み -->
+<script src="https://unpkg.com/encoding-japanese@1.0.30/encoding.min.js"></script>
 <script type="module">
-    import { scanStudentIdWithRetry } from "./js/NfcReaderPlain.js";
+    import { scanStudentIdWithRetry } from "./js/nfcReader.js";
 
     console.log("NFC handler module loaded");
 
     document.addEventListener("click", async (e) => {
         const target = e.target;
         if (!target) return;
-        // 念のため HTMLElement だけに絞る
         if (!(target instanceof HTMLElement)) return;
 
         if (target.id === "scan") {
@@ -33,6 +34,7 @@
         }
     });
 </script>
+
 
 <body>
     <header>
