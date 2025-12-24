@@ -1,6 +1,6 @@
 import axios from 'https://cdn.jsdelivr.net/npm/axios@1.7.2/+esm';
 
-const API_BASE_URL = 'http://127.0.0.1:8443';
+const API_BASE_URL = 'http://localhost:8443';
 
 // axiosインスタンス
 const client = axios.create({
@@ -41,6 +41,12 @@ export const API = {
 
         // 備品詳細取得
         getById: (id) => client.get(`/api/v2/assets/${id}`),
+
+        // 備品マスタ取得
+        getMasterById: (id) => client.get(`/api/v2/assets/masters/${id}`),
+        
+        // 管理番号でマスタ・備品ペア情報を取得
+        getPair: (managementNumber) => client.get(`/api/v2/assets/pair/${managementNumber}`),
 
         // 備品更新
         update: (id, payload) => client.put(`/api/v2/assets/${id}`, payload),
