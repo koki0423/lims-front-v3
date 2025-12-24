@@ -1,11 +1,8 @@
-import axios from 'https://cdn.jsdelivr.net/npm/axios@1.7.2/+esm'; // CDN版 (バンドルツールなしの場合)
+import axios from 'https://cdn.jsdelivr.net/npm/axios@1.7.2/+esm';
 
-// === 1. クライアント設定 (共通設定) ===
-// 開発環境と本番環境で切り替えたい場合はここで判定
-// const API_BASE_URL = window.location.hostname === 'localhost' ? 'https://127.0.0.1:8443' : '/api';
 const API_BASE_URL = 'http://127.0.0.1:8443';
 
-// 内部利用するaxiosインスタンス
+// axiosインスタンス
 const client = axios.create({
     baseURL: API_BASE_URL,
     timeout: 15000,
@@ -14,9 +11,9 @@ const client = axios.create({
     }
 });
 
-// インターセプター (レスポンス処理)
+// レスポンス処理用インターセプター
 client.interceptors.response.use(
-    (res) => res.data, // ★ここポイント: res.dataを返すようにすると呼び出し元がスッキリします
+    (res) => res.data,
     (err) => {
         console.error('API Error:', err);
         return Promise.reject(err);
