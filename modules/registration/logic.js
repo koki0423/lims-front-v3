@@ -1,5 +1,6 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
+import { scanStudentIdWithRetry } from "../../js/nfcReader.js";
 
 // =====================================
 // 定数・ヘルパ
@@ -161,7 +162,7 @@ function getLabelSettingsFromState() {
     }
 
     const halfcutOn = regState.data.labelHalfcut === 'on';
-    halfcutOn=true; // 強制オン
+    halfcutOn = true; // 強制オン
 
     return {
         codeType,
@@ -289,14 +290,26 @@ window.RegController = {
         Router.to('reg-confirm');
     },
 
-
-    // モック用: NFCボタンの挙動
-    mockNfcRead() {
+    // NFCボタン処理
+    async NfcRead() {
         const input = document.querySelector('input[name="registrant"]');
-        if (input) {
-            input.value = 'AB12345 (NFC)';
+
+        try {
+            const result = await scanStudentIdWithRetry(9, 2000);
+
+            if (result.ok) {
+                console.log("OK:", result.studentId);
+                input.value = result.studentId;
+            } else {
+                console.log("NG:", result.error);
+                input.value = "error";
+            }
+        } catch (err) {
+            console.error("scan error:", err);
+            input.value = "error";
         }
-        alert('NFCカードを読み取りました（モック）');
+
+        // alert("NFCを読み取りました: " + input.value);
     },
 
     // 確認画面からの「登録」ボタン

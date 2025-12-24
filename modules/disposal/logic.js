@@ -1,5 +1,5 @@
 import { Router } from '../../js/router.js';
-import { API } from '../../js/api.js';
+import { scanStudentIdWithRetry } from "../../js/nfcReader.js";
 
 // 廃棄機能の状態管理
 const disposalState = {
@@ -92,15 +92,26 @@ window.DisposalController = {
         console.log('Input Data:', disposalState.data);
     },
 
-    // モック用: NFCボタンの挙動
-    mockNfcRead() {
+    // NFCボタン処理
+    async NfcRead() {
         const input = document.querySelector('input[name="registrant"]');
-        if (input) {
-            // 実運用に近づけるため「(NFC)」は付けずに純粋なIDだけ入れる
-            input.value = 'AB12345';
-            disposalState.data.registrant = 'AB12345';
+
+        try {
+            const result = await scanStudentIdWithRetry(9, 2000);
+
+            if (result.ok) {
+                console.log("OK:", result.studentId);
+                input.value = result.studentId;
+            } else {
+                console.log("NG:", result.error);
+                input.value = "error";
+            }
+        } catch (err) {
+            console.error("scan error:", err);
+            input.value = "error";
         }
-        alert('NFCを読み取りました（モック）');
+
+        // alert("NFCを読み取りました: " + input.value);
     },
 
     // 入力画面 -> 確認画面
