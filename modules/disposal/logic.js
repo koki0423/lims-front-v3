@@ -146,7 +146,7 @@ export function initDisposal(view) {
         }
 
     } else if (view === 'history') {
-        initDisposalHistory(); // router側で呼んでいるならコメントアウトのままでOK
+        initDisposalHistory();
     }
 }
 
