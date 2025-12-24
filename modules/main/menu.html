@@ -1,18 +1,22 @@
 <div class="screen-content">
     <div class="menu-grid">
         <button class="menu-btn primary" onclick="Router.to('reg-select')">新規登録</button>
-        
+
         <div class="row">
             <button class="menu-btn" onclick="Router.to('lend-return-top')">貸出・返却</button>
             <button class="menu-btn" onclick="Router.to('disposal-top')">廃棄</button>
         </div>
-        
+
         <div class="row">
             <button class="menu-btn" onclick="Router.to('item-list')">備品参照・編集</button>
             <button class="menu-btn" onclick="Router.to('search-top')">検索</button>
         </div>
         <div class="footer-btn">
             <button class="sm-btn" onclick="Router.to('admin-login')">管理者ログイン</button>
+        </div>
+
+        <div>
+            <button id="scan">NFCテスト</button>
         </div>
     </div>
 </div>
