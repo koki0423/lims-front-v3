@@ -69,9 +69,9 @@ export const API = {
 
     // 廃棄
     disposal: {
-        register: (assetId, data) => client.post(`/api/v2/assets/${encodeURIComponent(assetId)}/disposals`, data), // 数値の asset.id で登録
+        register: (management_number, data) => client.post(`/api/v2/assets/${encodeURIComponent(management_number)}/disposals`, data),
         lookup: (mgmtCode) => client.get(`/api/v2/assets/mgmt/${encodeURIComponent(mgmtCode)}`, mgmtCode),// クエリ方式の場合: client.get('/api/v1/disposal', { params: { id: mgmtCode } })
-        history: () => client.get('/api/v2/disposals'),
+        fetchHistory: () => client.get('/api/v2/disposals'),
     },
 
     // 管理者・認証（まだバックエンド実装してない）
