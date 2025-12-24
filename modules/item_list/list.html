@@ -1,15 +1,15 @@
 <div class="screen-content">
     <h2>備品参照・編集</h2>
-    
-<div class="filters-container">
-    <label>絞り込み:</label>
-    <button class="filter-btn" data-status="1" onclick="ItemListController.toggleFilter('1')">正常</button>
-    <button class="filter-btn" data-status="2" onclick="ItemListController.toggleFilter('2')">故障</button>
-    <button class="filter-btn" data-status="3" onclick="ItemListController.toggleFilter('3')">修理中</button>
-    <button class="filter-btn" data-status="4" onclick="ItemListController.toggleFilter('4')">貸出中</button>
-    <button class="filter-btn" data-status="5" onclick="ItemListController.toggleFilter('5')">廃棄済み</button>
-    <button class="filter-btn" data-status="6" onclick="ItemListController.toggleFilter('6')">紛失</button>
-</div>
+
+    <div class="filters-container">
+        <label>絞り込み:</label>
+        <button class="filter-btn" data-status="1" onclick="ItemListController.toggleFilter('1')">正常</button>
+        <button class="filter-btn" data-status="2" onclick="ItemListController.toggleFilter('2')">故障</button>
+        <button class="filter-btn" data-status="3" onclick="ItemListController.toggleFilter('3')">修理中</button>
+        <button class="filter-btn" data-status="4" onclick="ItemListController.toggleFilter('4')">貸出中</button>
+        <button class="filter-btn" data-status="5" onclick="ItemListController.toggleFilter('5')">廃棄済み</button>
+        <button class="filter-btn" data-status="6" onclick="ItemListController.toggleFilter('6')">紛失</button>
+    </div>
 
 
     <table class="data-table">
@@ -23,9 +23,59 @@
             </tr>
         </thead>
         <tbody id="item-list-body">
-            </tbody>
+        </tbody>
     </table>
     <div class="nav-buttons">
         <button class="back-btn" onclick="Router.to('main-menu')">戻る</button>
+    </div>
+</div>
+
+<div id="edit-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-window">
+        <h3>備品情報編集</h3>
+
+        <form id="form-item-edit" onsubmit="event.preventDefault(); ItemListController.update();">
+            <input type="hidden" id="edit-asset-id">
+
+            <div class="info-block">
+                <h4>マスタ情報 (変更不可)</h4>
+                <div class="form-group">
+                    <label>備品名</label>
+                    <input type="text" id="edit-name" readonly class="readonly-input">
+                </div>
+                <div class="form-group">
+                    <label>管理番号</label>
+                    <input type="text" id="edit-code" readonly class="readonly-input">
+                </div>
+            </div>
+
+            <div class="info-block">
+                <h4>管理状態</h4>
+                <div class="form-group">
+                    <label>ステータス</label>
+                    <select id="edit-status">
+                        <option value="1">正常</option>
+                        <option value="2">故障</option>
+                        <option value="3">修理中</option>
+                        <option value="4">貸出中</option>
+                        <option value="5">廃棄済み</option>
+                        <option value="6">紛失</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>保管場所</label>
+                    <input type="text" id="edit-location">
+                </div>
+                <div class="form-group">
+                    <label>利用者/メモ</label>
+                    <input type="text" id="edit-owner">
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button type="button" class="back-btn" onclick="ItemListController.closeModal()">閉じる</button>
+                <button type="submit" class="primary-btn">更新登録</button>
+            </div>
+        </form>
     </div>
 </div>
