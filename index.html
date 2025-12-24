@@ -6,6 +6,34 @@
     <title>備品管理システム | Doly Lab</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
+
+<script type="module">
+    import { scanStudentIdWithRetry } from "./js/NfcReaderPlain.js";
+
+    console.log("NFC handler module loaded");
+
+    document.addEventListener("click", async (e) => {
+        const target = e.target;
+        if (!target) return;
+        // 念のため HTMLElement だけに絞る
+        if (!(target instanceof HTMLElement)) return;
+
+        if (target.id === "scan") {
+            console.log("scan start");
+            try {
+                const result = await scanStudentIdWithRetry(9, 2000);
+                if (result.ok) {
+                    console.log("OK:", result.studentId);
+                } else {
+                    console.log("NG:", result.error);
+                }
+            } catch (err) {
+                console.error("scan error:", err);
+            }
+        }
+    });
+</script>
+
 <body>
     <header>
         <div class="header-inner">
