@@ -23,7 +23,6 @@ client.interceptors.response.use(
     }
 );
 
-
 // === 2. エンドポイント定義 (機能ごとにオブジェクトでまとめる) ===
 export const API = {
     // ■ 備品関連 (assets)

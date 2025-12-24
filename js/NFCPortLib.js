@@ -1,4 +1,3 @@
-/* eslint-disable */
 /*
  * brief    NFC Port Library of WebClient
  * date     2021/09/21
