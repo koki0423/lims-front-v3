@@ -25,12 +25,11 @@ async function scanStudentIdOnce() {
     try {
         lib = new NFCPortLib();
 
-        // タイムアウトなどは元コードに合わせて調整
         const config = new Configuration(500, 500, true, true);
         await lib.init(config);
         await lib.open();
 
-        // FeliCa 学生証検出用 (元の DetectionOption と同じ)
+        // FeliCa 検出用
         const detectOption = new DetectionOption(
             new Uint8Array([0x82, 0x77]),
             0,
@@ -41,7 +40,7 @@ async function scanStudentIdOnce() {
 
         const card = await lib.detectCard("iso18092", detectOption);
 
-        // 学籍番号読み出しコマンド（元コードからコピー）
+        // 学籍番号読み出しコマンド
         const readStudentIdCommand = new Uint8Array([
             16, 0x06, 0, 0, 0, 0, 0, 0, 0, 0,
             1, 0x0b, 0x01, 1, 0x80, 0x00
@@ -73,7 +72,7 @@ async function scanStudentIdOnce() {
             type: "string"
         });
 
-        // 元の実装に合わせて 3〜10 桁目を学籍番号として抜き出し
+        // 3〜10 桁目を学籍番号として抜き出し
         const studentId = decodedString.substring(3, 10);
 
         if (!studentId || studentId.length === 0) {
@@ -86,7 +85,6 @@ async function scanStudentIdOnce() {
             try {
                 await lib.close();
             } catch (_) {
-                // close 失敗は握りつぶす
             }
         }
     }
