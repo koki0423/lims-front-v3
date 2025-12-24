@@ -30,10 +30,78 @@ window.ItemListController = {
         updateFilterButtonStyles();
     },
 
-    // 編集画面へ（仮）
-    edit(id) {
-        console.log('Edit item:', id);
-        alert(`備品ID: ${id} の編集画面へ`);
+    // 編集モーダルを開く
+    async edit(managementNumber) {
+        console.log('Fetching pair for:', managementNumber);
+        
+        try {
+            // 1. 新しいエンドポイントを叩く
+            const data = await API.assets.getPair(managementNumber);
+            
+            // レスポンスの構造: { master: {...}, asset: {...} }
+            const master = data.master;
+            const asset = data.asset;
+
+            console.log('Fetched data:', data);
+
+            if (!master || !asset) {
+                throw new Error('データの構造が不正です');
+            }
+
+            // 2. フォームに値をセット
+            
+            // ★重要: 更新(PUT)用に asset_id を隠しフィールドにセット
+            document.getElementById('edit-asset-id').value = asset.asset_id;
+            
+            // マスタ情報 (読み取り専用エリア)
+            document.getElementById('edit-name').value = master.name || '';
+            document.getElementById('edit-code').value = master.management_number || '';
+            
+            // 編集可能エリア (asset側の情報)
+            document.getElementById('edit-status').value = asset.status_id;
+            document.getElementById('edit-location').value = asset.default_location || ''; // または asset.location
+            document.getElementById('edit-owner').value = asset.owner || '';
+
+            // 3. モーダル表示
+            document.getElementById('edit-modal').style.display = 'flex';
+
+        } catch (error) {
+            console.error(error);
+            alert('データの取得に失敗しました: ' + (error.message || 'Unknown Error'));
+        }
+    },
+
+    // ★追加: モーダルを閉じる
+    closeModal() {
+        document.getElementById('edit-modal').style.display = 'none';
+    },
+
+    // ★追加: 更新実行
+    async update() {
+        const id = document.getElementById('edit-asset-id').value;
+
+        // 送信データの作成
+        const payload = {
+            status_id: Number(document.getElementById('edit-status').value),
+            default_location: document.getElementById('edit-location').value,
+            owner: document.getElementById('edit-owner').value
+            // 必要に応じて他のフィールドも
+        };
+
+        try {
+            // 更新API呼び出し
+            await API.assets.update(id, payload);
+
+            alert('更新しました');
+            this.closeModal();
+
+            // リストを再読み込みして最新状態にする
+            initItemList();
+
+        } catch (error) {
+            console.error(error);
+            alert('更新に失敗しました: ' + error.message);
+        }
     }
 };
 
@@ -95,6 +163,7 @@ function renderList() {
         const statusObj = STATUS_MAP[statusId] || { name: '不明', class: 'badge-gray' };
         const displayId = item.management_number || item.asset_id || '-';
         const displayName = item.name || `(マスタID: ${item.asset_master_id})`;
+        const mgmtNum = item.management_number || item.asset_id;
 
         return `
             <tr>
@@ -105,7 +174,10 @@ function renderList() {
                     <span class="status-badge ${statusObj.class}">${statusObj.name}</span>
                 </td>
                 <td style="text-align:center; padding: 12px 5px;">
-                    <button class="sm-btn" onclick="ItemListController.edit('${item.asset_id}')">編集</button>
+                    <button class="sm-btn" onclick="ItemListController.edit('${mgmtNum}')">編集</button>
+                </td>
+                <td style="text-align:center; padding: 12px 5px;">
+                    <button class="sm-btn" onclick="ItemListController.lend('${item.asset_id}')">貸出</button>
                 </td>
             </tr>
         `;
