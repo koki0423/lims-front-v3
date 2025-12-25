@@ -47,28 +47,37 @@
                     <label>管理番号</label>
                     <input type="text" id="edit-code" readonly class="readonly-input">
                 </div>
+                <div class="form-group">
+                    <label>現在の貸出先/場所</label>
+                    <input type="text" id="disp-current-location" readonly class="readonly-input">
+                </div>
             </div>
 
             <div class="info-block">
                 <h4>管理状態</h4>
+                <div class="form-group">
+                    <label>数量 <span id="qty-lock-msg"
+                            style="color:red; font-size:0.8em; display:none;">(個別管理のため変更不可)</span></label>
+                    <input type="number" id="edit-qty" min="1">
+                </div>
                 <div class="form-group">
                     <label>ステータス</label>
                     <select id="edit-status">
                         <option value="1">正常</option>
                         <option value="2">故障</option>
                         <option value="3">修理中</option>
-                        <option value="4">貸出中</option>
+                        <!-- <option value="4">貸出中</option> --><!-- 貸出中は整合性を取るためにモーダルから選択できないようにする -->
                         <option value="5">廃棄済み</option>
                         <option value="6">紛失</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>保管場所</label>
+                    <label>標準保管場所</label>
                     <input type="text" id="edit-location">
                 </div>
                 <div class="form-group">
-                    <label>利用者/メモ</label>
-                    <input type="text" id="edit-owner">
+                    <label>備考</label>
+                    <input type="text" id="edit-notes">
                 </div>
             </div>
 

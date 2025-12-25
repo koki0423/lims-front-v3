@@ -32,75 +32,124 @@ window.ItemListController = {
 
     // 編集モーダルを開く
     async edit(managementNumber) {
-        console.log('Fetching pair for:', managementNumber);
-        
         try {
-            // 1. 新しいエンドポイントを叩く
             const data = await API.assets.getPair(managementNumber);
-            
-            // レスポンスの構造: { master: {...}, asset: {...} }
-            const master = data.master;
             const asset = data.asset;
+            const master = data.master;
 
-            console.log('Fetched data:', data);
+            // === 1. ID等のセット (共通) ===
+            document.getElementById('edit-asset-id').value = asset.asset_id;
+            document.getElementById('edit-name').value = master.name || '';
+            document.getElementById('edit-code').value = asset.management_number;
+            document.getElementById('disp-current-location').value = asset.location || '-';
 
-            if (!master || !asset) {
-                throw new Error('データの構造が不正です');
+            // === 2. 要素の取得 ===
+            const qtyInput = document.getElementById('edit-qty');
+            const qtyMsg = document.getElementById('qty-lock-msg');
+            const statusSelect = document.getElementById('edit-status');
+            const locInput = document.getElementById('edit-location');
+            const notesInput = document.getElementById('edit-notes');
+
+            // === 3. 値のセット ===
+            qtyInput.value = asset.quantity;
+            statusSelect.value = asset.status_id;
+            locInput.value = asset.default_location || '';
+            notesInput.value = asset.notes || '';
+
+            // === 4. ロック状態の初期化 (リセット) ===
+            // 一旦すべて有効化してから、条件に応じて無効化していくスタイルがバグりにくいです
+            statusSelect.disabled = false;
+            locInput.disabled = false;
+            notesInput.disabled = false;
+            
+            // 数量ロックの判定 (シリアル有無)
+            const isSerial = (asset.serial && asset.serial.trim() !== "");
+            if (isSerial) {
+                qtyInput.disabled = true;
+                qtyInput.style.backgroundColor = "#f5f5f5";
+                if(qtyMsg) qtyMsg.style.display = "inline";
+            } else {
+                qtyInput.disabled = false;
+                qtyInput.style.backgroundColor = "#fff";
+                if(qtyMsg) qtyMsg.style.display = "none";
             }
 
-            // 2. フォームに値をセット
-            
-            // ★重要: 更新(PUT)用に asset_id を隠しフィールドにセット
-            document.getElementById('edit-asset-id').value = asset.asset_id;
-            
-            // マスタ情報 (読み取り専用エリア)
-            document.getElementById('edit-name').value = master.name || '';
-            document.getElementById('edit-code').value = master.management_number || '';
-            
-            // 編集可能エリア (asset側の情報)
-            document.getElementById('edit-status').value = asset.status_id;
-            document.getElementById('edit-location').value = asset.default_location || ''; // または asset.location
-            document.getElementById('edit-owner').value = asset.owner || '';
 
-            // 3. モーダル表示
+            // === 5. ステータス別の特殊ロック処理 ===
+
+            // ★ケースA: 貸出中 (ID: 4)
+            // -> ステータス変更不可 (返却処理を通すべきだから)
+            if (asset.status_id === 4) {
+                statusSelect.disabled = true;
+                // 念のため背景色も変えておくと親切かも
+                // statusSelect.style.backgroundColor = "#f5f5f5";
+            }
+
+            // ★ケースB: 廃棄済み (ID: 5)
+            // -> 備考以外は一切変更不可
+            if (asset.status_id === 5) {
+                // 強制フルロック
+                statusSelect.disabled = true;
+                qtyInput.disabled = true;      // バルク品であっても変更不可
+                locInput.disabled = true;      // 場所変更も不可
+                
+                // 視覚的フィードバック
+                qtyInput.style.backgroundColor = "#f5f5f5";
+                locInput.style.backgroundColor = "#f5f5f5";
+                // statusSelect.style.backgroundColor = "#f5f5f5";
+
+                // ※ notesInput (備考) だけは disabled = false のまま残る
+            }
+
+            // モーダル表示
             document.getElementById('edit-modal').style.display = 'flex';
 
         } catch (error) {
             console.error(error);
-            alert('データの取得に失敗しました: ' + (error.message || 'Unknown Error'));
+            alert('データの取得に失敗しました');
         }
     },
 
-    // ★追加: モーダルを閉じる
     closeModal() {
         document.getElementById('edit-modal').style.display = 'none';
     },
 
-    // ★追加: 更新実行
     async update() {
         const id = document.getElementById('edit-asset-id').value;
+        
+        const statusVal = document.getElementById('edit-status').value;
+        const locVal = document.getElementById('edit-location').value;
+        const notesVal = document.getElementById('edit-notes').value;
 
-        // 送信データの作成
         const payload = {
-            status_id: Number(document.getElementById('edit-status').value),
-            default_location: document.getElementById('edit-location').value,
-            owner: document.getElementById('edit-owner').value
-            // 必要に応じて他のフィールドも
+            status_id: Number(statusVal),
+            default_location: locVal,
+            notes: notesVal,
         };
 
-        try {
-            // 更新API呼び出し
-            await API.assets.update(id, payload);
+        const qtyInput = document.getElementById('edit-qty');
+        if (!qtyInput.disabled) {
+            payload.quantity = Number(qtyInput.value);
+        }
 
+        console.log('Update Payload:', payload); // デバッグ用
+
+        try {
+            // PUT /assets/:asset_id
+            await API.assets.update(id, payload);
+            
             alert('更新しました');
             this.closeModal();
-
-            // リストを再読み込みして最新状態にする
-            initItemList();
-
+            
+            if (typeof initItemList === 'function') {
+                initItemList();
+            } else {
+                 window.location.reload(); 
+            }
+            
         } catch (error) {
             console.error(error);
-            alert('更新に失敗しました: ' + error.message);
+            alert('更新に失敗しました: ' + (error.response?.data?.error || error.message));
         }
     }
 };
@@ -123,7 +172,6 @@ export async function initItemList() {
 
         console.log("API Response:", response); // デバッグ用
 
-        // 配列を取り出す (itemsプロパティの中にある)
         itemListState.items = response.items || [];
 
         renderList();
@@ -157,7 +205,6 @@ function renderList() {
         return;
     }
 
-    // HTML生成 (変更なし)
     tbody.innerHTML = filteredItems.map(item => {
         const statusId = item.status_id || 1;
         const statusObj = STATUS_MAP[statusId] || { name: '不明', class: 'badge-gray' };
