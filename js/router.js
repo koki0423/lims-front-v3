@@ -12,6 +12,7 @@ const routes = {
 
     // === 新規登録 ===
     'reg-select': { path: 'modules/registration/step1.html', title: '新規登録' },
+    'reg-batch': { path: 'modules/registration/batchReg.html', title: '新規登録 > 管理方法選択 > 一括登録' },
     'reg-input-1': { path: 'modules/registration/step2.html', title: '新規登録 > 基本', init: () => initRegistration('step2') },
     'reg-input-2': { path: 'modules/registration/step3.html', title: '新規登録 > 詳細', init: () => initRegistration('step3') },
     'reg-confirm': { path: 'modules/registration/confirm.html', title: '新規登録 > 確認', init: () => initRegistration('confirm') },

@@ -1,0 +1,38 @@
+<div class="screen-content">
+    <h2>新規登録 > 管理方法選択 > 一括登録</h2>
+    <div class="form-group">
+        <label>CSVファイルを選択</label>
+        <div class="input-file">
+            <input type="file" id="file-csv" name="file-csv" accept=".csv" />
+        </div>
+    </div>
+    <div class="form-group">
+        <label>ラベル設定</label>
+        <div class="info-row">
+            <span class="info-label">コード種別</span>
+            <select id="labelCodeType" name="labelCodeType">
+                <option value="QR" selected>QRコード</option>
+                <option value="CODE128">バーコード(Code128)</option>
+            </select>
+        </div>
+        <div class="info-row" style="margin-top: 8px;">
+            <span class="info-label">テープ幅</span>
+            <select id="labelTapeWidth" name="labelTapeWidth">
+                <option value="9" selected>9 mm</option>
+                <option value="12">12 mm</option>
+                <option value="18">18 mm</option>
+            </select>
+        </div>
+        <div class="info-row" style="margin-top: 8px;">
+            <label>
+                <input type="checkbox" id="labelHalfcut" name="labelHalfcut" checked disabled>
+                ハーフカットを有効にする
+            </label>
+        </div>
+    </div>
+
+    <div class="nav-buttons" style="margin-top: 60px;">
+        <button class="back-btn" onclick="Router.to('reg-select')">戻る</button>
+        <button class="primary-btn" onclick="RegController.uploadCsv()">登録</button>
+    </div>
+</div>

@@ -238,6 +238,42 @@ async function executeRegistration(payloads) {
     return { managementNumber: mgmtNumber, printFailed, printError };
 }
 
+// 一括登録用ファイルアップロード処理
+async function uploadCsv() {
+    const fileInput = document.getElementById('file-csv'); // ファイル選択inputのID
+    const labelType = document.getElementById('labelCodeType').value;
+    const tapeWidth = document.getElementById('labelTapeWidth').value;
+    const halfcut = document.getElementById('labelHalfcut').checked;
+
+    if (fileInput.files.length === 0) {
+        alert('ファイルを選択してください');
+        return;
+    }
+    const file = fileInput.files[0];
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await API.assets.batchRegister('commit', formData);
+        console.log('Batch upload response:', response);
+        
+        // 印刷設定をセッションに保存
+        const printConfig = {
+            type: labelType,
+            width: tapeWidth,
+            halfcut,
+        };
+        sessionStorage.setItem('last_import_print_config', JSON.stringify(printConfig));
+        //印刷APIは後で実装
+
+        Router.to('complete');
+    } catch (error) {
+        console.error(error);
+        alert('アップロードに失敗しました');
+    }
+}
+
 // =====================================
 // HTML から呼ぶコントローラ
 // =====================================
@@ -357,6 +393,11 @@ window.RegController = {
         } finally {
             regState.submitting = false;
         }
+    },
+
+    // 一括登録用ファイルアップロード処理
+    async uploadCsv() {
+        await uploadCsv();
     },
 };
 

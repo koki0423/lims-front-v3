@@ -184,6 +184,42 @@ textarea {
     gap: 10px;
 }
 
+/* ファイル入力エリア全体の見た目 */
+.input-file input[type="file"] {
+    font-size: 14px;
+    color: #333;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+    padding: 6px;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+}
+
+/* ホバー時の枠線 */
+.input-file input[type="file"]:hover {
+    border-color: #006400;
+}
+
+/* 「ファイルを選択」ボタン部分のカスタマイズ */
+.input-file input[type="file"]::file-selector-button {
+    background-color: #f0f0f0; /* ボタン背景（薄いグレー） */
+    color: #333;
+    border: 1px solid #bbb;
+    padding: 6px 12px;
+    margin-right: 15px; /* ファイル名との隙間 */
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+/* ボタン部分のホバーエフェクト */
+.input-file input[type="file"]:hover::file-selector-button {
+    background-color: #e0e0e0; /* ホバー時に少し濃く */
+}
+
 .nfc-btn {
     background: #ddd;
     border: none;
