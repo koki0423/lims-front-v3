@@ -30,6 +30,13 @@ export const API = {
         // 備品新規登録
         createAsset: (payload) => client.post('/api/v2/assets', payload),
 
+        // 一括登録
+        batchRegister: (mode, formData) => client.post(`/api/v2/assets/import?mode=${mode}`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            }
+        }),
+
         // ラベル印刷
         printLabel: (payload) => client.post('/api/v2/assets/print', payload),
 
@@ -44,7 +51,7 @@ export const API = {
 
         // 備品マスタ取得
         getMasterById: (id) => client.get(`/api/v2/assets/masters/${id}`),
-        
+
         // 管理番号でマスタ・備品ペア情報を取得
         getPair: (managementNumber) => client.get(`/api/v2/assets/pair/${managementNumber}`),
 
