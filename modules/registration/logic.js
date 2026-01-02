@@ -26,155 +26,77 @@ const regState = {
 // GENRE 関連ヘルパ
 // -------------------------------------
 function genreByName(name) {
-    if (!name) {
-        return null;
-    }
-    for (let i = 0; i < GENRES.length; i++) {
-        if (GENRES[i].name === name) {
-            return GENRES[i];
-        }
-    }
-    return null;
+    if (!name) return null;
+    return GENRES.find(g => g.name === name) || null;
 }
 
 function genreById(id) {
     const target = Number(id);
-    for (let i = 0; i < GENRES.length; i++) {
-        if (GENRES[i].id === target) {
-            return GENRES[i];
-        }
-    }
-    return null;
+    return GENRES.find(g => g.id === target) || null;
 }
 
 // -------------------------------------
-// 日付表示用フォーマット
-// -------------------------------------
-function formatDate(ymd) {
-    if (!ymd) {
-        return '';
-    }
-    const s = String(ymd);
-    const parts = s.split('-');
-    if (parts.length !== 3) {
-        return s;
-    }
-    return parts[0] + '/' + parts[1] + '/' + parts[2];
-}
-
-// -------------------------------------
-// payload 組み立て
+// payload 組み立て (個別登録用)
 // -------------------------------------
 function buildPayloadsFromState() {
     const d = regState.data;
 
-    // 必須チェック（旧 Register.js とほぼ同じ）
-    if (!d.itemName) {
-        alert('備品名は必須です。');
-        return null;
-    }
-    if (!d.maker) {
-        alert('メーカー名は必須です。');
-        return null;
-    }
-    if (!d.model) {
-        alert('型番は必須です。（不明な場合は「不明」と入力）');
-        return null;
-    }
-    if (regState.type === 'individual' && !d.serial) {
-        alert('シリアル番号は必須です。（不明な場合は「不明」と入力）');
-        return null;
-    }
-    if (!d.genre) {
-        alert('備品ジャンルは必須です。');
-        return null;
-    }
-    if (!d.location) {
-        alert('標準保管場所 または 所有者は必須です。');
-        return null;
-    }
-    if (!d.purchaseDate) {
-        alert('購入日は必須です。');
-        return null;
-    }
-    if (!d.registrant) {
-        alert('登録者は必須です。');
-        return null;
-    }
+    // 必須チェック
+    if (!d.itemName) { alert('備品名は必須です。'); return null; }
+    if (!d.maker) { alert('メーカー名は必須です。'); return null; }
+    if (!d.model) { alert('型番は必須です。（不明な場合は「不明」と入力）'); return null; }
+    if (regState.type === 'individual' && !d.serial) { alert('シリアル番号は必須です。'); return null; }
+    if (!d.genre) { alert('備品ジャンルは必須です。'); return null; }
+    if (!d.location) { alert('標準保管場所 または 所有者は必須です。'); return null; }
+    if (!d.purchaseDate) { alert('購入日は必須です。'); return null; }
+    if (!d.registrant) { alert('登録者は必須です。'); return null; }
 
     const genre = genreByName(d.genre);
-    if (!genre) {
-        alert('備品ジャンルの値が不正です。');
-        return null;
-    }
+    if (!genre) { alert('備品ジャンルの値が不正です。'); return null; }
 
     // 区分: 個別 =1, 一括 =2
-    let managementCategoryId = null;
-    if (regState.type === 'individual') {
-        managementCategoryId = 1;
-    } else if (regState.type === 'bulk') {
-        managementCategoryId = 2;
-    } else {
-        alert('管理方法が選択されていません。');
-        return null;
-    }
-
-    // === マスタ用 payload ===
-    const masterPayload = {
-        name: d.itemName,
-        management_category_id: managementCategoryId,
-        genre_id: genre.id,
-        manufacturer: d.maker,
-        model: d.model || null,
-    };
-
-    // === 個別資産用 payload ===
-    const assetPayload = {
-        serial: regState.type === 'individual' ? (d.serial || null) : null,
-        quantity: regState.type === 'bulk' ? Number(d.quantity || 1) : 1,
-        purchased_at: d.purchaseDate
-            ? new Date(d.purchaseDate).toISOString()
-            : new Date().toISOString(),
-        status_id: 1, // 新規登録時は「正常」
-        owner: d.registrant || null,          // 登録者を owner に入れる
-        default_location: d.location || null, // 保管場所
-        notes: d.remarks || null,
-    };
+    let managementCategoryId = (regState.type === 'individual') ? 1 : (regState.type === 'bulk') ? 2 : null;
+    if (!managementCategoryId) { alert('管理方法が選択されていません。'); return null; }
 
     return {
-        master: masterPayload,
-        asset: assetPayload,
+        master: {
+            name: d.itemName,
+            management_category_id: managementCategoryId,
+            genre_id: genre.id,
+            manufacturer: d.maker,
+            model: d.model || null,
+        },
+        asset: {
+            serial: regState.type === 'individual' ? (d.serial || null) : null,
+            quantity: regState.type === 'bulk' ? Number(d.quantity || 1) : 1,
+            purchased_at: d.purchaseDate ? new Date(d.purchaseDate).toISOString() : new Date().toISOString(),
+            status_id: 1, // 新規登録時は「正常」
+            owner: d.registrant || null,
+            default_location: d.location || null,
+            notes: d.remarks || null,
+        },
         genre,
     };
 }
 
 // -------------------------------------
-// ラベル印刷 payload
+// ラベル印刷 payload (個別登録用)
 // -------------------------------------
 function getLabelSettingsFromState() {
     const rawCode = regState.data.labelCodeType || 'QR';
     const codeType = rawCode === 'CODE128' ? 'CODE128' : 'QR';
-
-    const rawWidth = regState.data.labelTapeWidth || '9';
-    let tapeWidth = parseInt(rawWidth, 10);
-    if (isNaN(tapeWidth)) {
-        tapeWidth = 9;
-    }
-
-    const halfcutOn = regState.data.labelHalfcut === 'on';
-    halfcutOn = true; // 強制オン
+    const tapeWidth = parseInt(regState.data.labelTapeWidth || '9', 10);
 
     return {
         codeType,
-        tapeWidth,
-        halfcut: halfcutOn,
+        tapeWidth: isNaN(tapeWidth) ? 9 : tapeWidth,
+        halfcut: true, // 強制オン
     };
 }
 
 function buildPrintPayload(masterPayload, managementNumber) {
     const label = getLabelSettingsFromState();
     const type = label.codeType === 'QR' ? 'qrcode' : 'code128';
-
     const g = genreById(masterPayload.genre_id);
 
     return {
@@ -195,35 +117,26 @@ function buildPrintPayload(masterPayload, managementNumber) {
     };
 }
 
-
 // -------------------------------------
-// 登録処理
+// 登録実行処理 (個別登録API呼び出し)
 // -------------------------------------
 async function executeRegistration(payloads) {
     // 1) マスタ登録
     const masterRes = await API.assets.createMaster(payloads.master);
-    const masterData = masterRes && masterRes.data ? masterRes.data : masterRes;
-    const assetMasterId = masterData && masterData.asset_master_id;
+    const masterData = masterRes?.data || masterRes;
+    const assetMasterId = masterData?.asset_master_id;
 
-    if (!assetMasterId) {
-        throw new Error('備品マスタの登録に失敗しました（asset_master_id が取得できません）');
-    }
+    if (!assetMasterId) throw new Error('備品マスタの登録に失敗しました');
 
     // 2) 個別資産登録
-    const assetPayloadWithMasterId = {
-        ...payloads.asset,
-        asset_master_id: assetMasterId,
-    };
-
+    const assetPayloadWithMasterId = { ...payloads.asset, asset_master_id: assetMasterId };
     const assetRes = await API.assets.createAsset(assetPayloadWithMasterId);
-    const assetData = assetRes && assetRes.data ? assetRes.data : assetRes;
-    const mgmtNumber = assetData && assetData.management_number;
+    const assetData = assetRes?.data || assetRes;
+    const mgmtNumber = assetData?.management_number;
 
-    if (!mgmtNumber) {
-        throw new Error('備品の登録に失敗しました（management_number が取得できません）');
-    }
+    if (!mgmtNumber) throw new Error('備品の登録に失敗しました');
 
-    // 3) ラベル印刷（失敗しても DB 登録は成功扱い）
+    // 3) ラベル印刷
     let printFailed = false;
     let printError = null;
     try {
@@ -238,41 +151,6 @@ async function executeRegistration(payloads) {
     return { managementNumber: mgmtNumber, printFailed, printError };
 }
 
-// 一括登録用ファイルアップロード処理
-async function uploadCsv() {
-    const fileInput = document.getElementById('file-csv');
-    const labelType = document.getElementById('labelCodeType').value;
-    const tapeWidth = document.getElementById('labelTapeWidth').value;
-    const halfcut = document.getElementById('labelHalfcut').checked;
-
-    if (fileInput.files.length === 0) {
-        alert('ファイルを選択してください');
-        return;
-    }
-    const file = fileInput.files[0];
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-        const response = await API.assets.batchRegister('commit', formData);
-        console.log('Batch upload response:', response);
-        
-        // 印刷設定をセッションに保存
-        const printConfig = {
-            type: labelType,
-            width: tapeWidth,
-            halfcut,
-        };
-        sessionStorage.setItem('last_import_print_config', JSON.stringify(printConfig));
-        //印刷APIは後で実装
-
-        Router.to('complete');
-    } catch (error) {
-        console.error(error);
-        alert('アップロードに失敗しました');
-    }
-}
 
 // =====================================
 // HTML から呼ぶコントローラ
@@ -281,39 +159,28 @@ window.RegController = {
     // P3: 管理方法選択
     setType(type) {
         regState.type = type; // 'individual' or 'bulk'
-        console.log('Selected Type:', type);
         Router.to('reg-input-1');
     },
 
-    // P4 -> P5: 入力画面1の保存と遷移
+    // P4 -> P5: 入力画面1保存
     saveStep1() {
         const form = document.getElementById('form-reg-1');
-        if (!form || !form.reportValidity()) {
-            return;
-        }
+        if (!form || !form.reportValidity()) return;
 
         const formData = new FormData(form);
-        for (const pair of formData.entries()) {
-            const key = pair[0];
-            const val = pair[1];
+        for (const [key, val] of formData.entries()) {
             regState.data[key] = val;
         }
-
-        console.log('Step1 Data:', regState.data);
         Router.to('reg-input-2');
     },
 
-    // P5 -> P6: 入力画面2の保存と遷移
+    // P5 -> P6: 入力画面2保存
     saveStep2() {
         const form = document.getElementById('form-reg-2');
-        if (!form || !form.reportValidity()) {
-            return;
-        }
+        if (!form || !form.reportValidity()) return;
 
         const formData = new FormData(form);
-        for (const pair of formData.entries()) {
-            const key = pair[0];
-            const val = pair[1];
+        for (const [key, val] of formData.entries()) {
             regState.data[key] = val;
         }
 
@@ -322,82 +189,163 @@ window.RegController = {
             regState.data.labelHalfcut = halfcutEl.checked ? 'on' : 'off';
         }
 
-        console.log('Step2 Data:', regState.data);
         Router.to('reg-confirm');
     },
 
-    // NFCボタン処理
+    // NFC読取
     async NfcRead() {
         const input = document.querySelector('input[name="registrant"]');
-
         try {
             const result = await scanStudentIdWithRetry(9, 2000);
-
-            if (result.ok) {
-                console.log("OK:", result.studentId);
-                input.value = result.studentId;
-            } else {
-                console.log("NG:", result.error);
-                input.value = "error";
-            }
+            input.value = result.ok ? result.studentId : "error";
         } catch (err) {
             console.error("scan error:", err);
             input.value = "error";
         }
-
-        // alert("NFCを読み取りました: " + input.value);
     },
 
-    // 確認画面からの「登録」ボタン
+    // 確認画面からの「登録」ボタン (個別登録フロー)
     async submit() {
-        if (regState.submitting) {
-            return;
-        }
+        if (regState.submitting) return;
         regState.submitting = true;
 
         try {
             const payloads = buildPayloadsFromState();
-            if (!payloads) {
-                regState.submitting = false;
-                return;
-            }
+            if (!payloads) return;
 
             const result = await executeRegistration(payloads);
 
             if (result.printFailed) {
-                const msg =
-                    '登録は完了しましたが、ラベル印刷に失敗しました。\n' +
-                    `管理番号: ${result.managementNumber}`;
-                alert(msg);
+                alert(`登録完了しましたが印刷に失敗しました。\n管理番号: ${result.managementNumber}`);
             } else {
                 alert(`登録＆印刷を実行しました。\n管理番号: ${result.managementNumber}`);
             }
 
-            console.log('Final Submit:', regState, payloads, result);
-
-            // 状態リセット
+            // リセット＆完了画面へ
             regState.data = {};
             regState.type = '';
-
-            // 完了表示（共通コンポーネント前提）
             if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
                 CommonController.showComplete('新規登録が完了しました');
             }
         } catch (e) {
             console.error('登録エラー:', e);
-            const msg =
-                (e && e.response && e.response.data && e.response.data.error) ||
-                e.message ||
-                '登録に失敗しました';
-            alert('登録に失敗しました。\n' + msg);
+            const msg = e.response?.data?.error || e.message || '登録に失敗しました';
+            alert(`登録に失敗しました。\n${msg}`);
         } finally {
             regState.submitting = false;
         }
     },
 
-    // 一括登録用ファイルアップロード処理
+    // 一括登録用 CSVアップロード処理
     async uploadCsv() {
-        await uploadCsv();
+        const fileInput = document.getElementById('file-csv');
+        const labelType = document.getElementById('labelCodeType').value;
+        const tapeWidth = document.getElementById('labelTapeWidth').value;
+        const halfcut = document.getElementById('labelHalfcut').checked;
+
+        if (!fileInput || fileInput.files.length === 0) {
+            alert('ファイルを選択してください');
+            return;
+        }
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            // API送信
+            const response = await API.assets.batchRegister('commit', formData);
+            console.log('Batch upload response:', response);
+
+            // 次の画面(完了画面)のためにデータを保存
+            const printConfig = {
+                type: labelType,
+                width: tapeWidth,
+                halfcut,
+            };
+            sessionStorage.setItem('last_import_print_config', JSON.stringify(printConfig));
+            // サーバーからの結果(results)を保存
+            sessionStorage.setItem('last_import_results', JSON.stringify(response.results));
+
+            // 印刷実行
+            await this.printImportedLabels();
+
+            Router.to('complete');
+        } catch (error) {
+            console.error(error);
+            const msg = error.response?.data?.error || error.message;
+            alert('アップロードに失敗しました: ' + msg);
+        }
+    },
+
+    // 一括登録後のラベル印刷処理
+    async printImportedLabels() {
+        const configStr = sessionStorage.getItem('last_import_print_config');
+        const resultsStr = sessionStorage.getItem('last_import_results');
+
+        if (!configStr || !resultsStr) {
+            // データがない場合はスルーして呼び出し元に戻る
+            return;
+        }
+
+        const config = JSON.parse(configStr);
+        const results = JSON.parse(resultsStr);
+
+        // 成功データ(Ok=true)のみ抽出して LabelData に変換
+        const labels = results
+            .filter(row => row.ok === true)
+            .map(row => {
+                // ジャンルIDから名前解決
+                const genreObj = genreById(row.genre_id);
+                const genreName = genreObj ? genreObj.name : 'その他';
+
+                return {
+                    checked: true,
+                    col_b: row.name || '',              // 備品名
+                    col_c: genreName,                   // ジャンル名
+                    col_d: row.management_number || '', // QRデータ
+                    col_e: row.management_number || ''  // 表示文字
+                };
+            });
+
+        if (labels.length === 0) {
+            alert('登録は完了しましたが、印刷可能なデータがありませんでした');
+            return;
+        }
+
+        // ここで確認ダイアログ
+        if (!confirm(`${labels.length} 件の登録に成功しました。\n続けてラベルを印刷しますか？`)) {
+            // キャンセルされたら印刷せず終了（呼び出し元に戻って完了画面へ）
+            return;
+        }
+
+        const payload = {
+            config: {
+                use_halfcut: config.halfcut,
+                confirm_tape_width: false,
+                enable_print_log: true
+            },
+            width: Number(config.width),
+            type: config.type.toLowerCase() === 'code128' ? 'code128' : 'qrcode',
+            labels: labels
+        };
+
+        try {
+            const response = await API.assets.printBatch(payload);
+            console.log('Batch print response:', response);
+            alert('印刷リクエストを送信しました');
+
+            // ★変更: ここでの Router.to('main-menu') は削除しました。
+            // 呼び出し元の uploadCsv が最後に 'complete' に飛ばしてくれるからです。
+
+            // データクリア
+            sessionStorage.removeItem('last_import_print_config');
+            sessionStorage.removeItem('last_import_results');
+
+        } catch (error) {
+            console.error('Print error:', error);
+            // 印刷失敗しても、登録自体はできているのでアラートだけ出して進む
+            alert('印刷に失敗しました: ' + (error.response?.data?.error || error.message) + '\n' + '一覧画面から手動で印刷してください。');
+        }
     },
 };
 
@@ -405,22 +353,13 @@ window.RegController = {
 // Router から呼ばれる初期化フック
 // =====================================
 export function initRegistration(step) {
-    console.log(`Initializing ${step}...`, regState.data);
-
     if (step === 'step2') {
-        // Step1 のデータをフォームに埋め戻す
         const form = document.getElementById('form-reg-1');
-        if (form) {
-            restoreFormData(form, regState.data);
-        }
+        if (form) restoreFormData(form, regState.data);
     } else if (step === 'step3') {
-        // Step2 のデータをフォームに埋め戻す
         const form = document.getElementById('form-reg-2');
-        if (form) {
-            restoreFormData(form, regState.data);
-        }
+        if (form) restoreFormData(form, regState.data);
     } else if (step === 'confirm') {
-        // 確認画面描画
         renderConfirm();
     }
 }
@@ -429,47 +368,36 @@ export function initRegistration(step) {
 // フォーム復元ヘルパ
 // -------------------------------------
 function restoreFormData(form, data) {
-    const keys = Object.keys(data);
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
+    Object.keys(data).forEach(key => {
         const input = form.querySelector('[name="' + key + '"]');
-        if (input) {
-            input.value = data[key];
-        }
-    }
+        if (input) input.value = data[key];
+    });
 }
 
 // -------------------------------------
-// 確認画面描画
+// 確認画面描画 (個別登録用)
 // -------------------------------------
 function renderConfirm() {
     const display = document.getElementById('confirm-display');
-    if (!display) {
-        return;
-    }
+    if (!display) return;
 
     const d = regState.data;
-
     const typeLabel = regState.type === 'individual' ? '個別管理' : '一括管理';
-    const codeTypeRaw = regState.data.labelCodeType || 'QR';
-    const codeTypeLabel = codeTypeRaw === 'CODE128' ? 'バーコード(Code128)' : 'QRコード';
-
-    const tapeWidth = regState.data.labelTapeWidth || '9';
-    const halfcutOn = regState.data.labelHalfcut === 'on';
-
-    const genre = genreByName(d.genre);
+    const codeTypeLabel = (d.labelCodeType === 'CODE128') ? 'バーコード(Code128)' : 'QRコード';
+    const tapeWidth = d.labelTapeWidth || '9';
+    const halfcutOn = d.labelHalfcut === 'on';
 
     display.innerHTML = `
         <div class="info-row"><span class="info-label">管理方法</span><span>${typeLabel}</span></div>
-        <div class="info-row"><span class="info-label">備品名</span><span>${regState.data.itemName || ''}</span></div>
-        <div class="info-row"><span class="info-label">メーカー</span><span>${regState.data.maker || ''}</span></div>
-        <div class="info-row"><span class="info-label">型番</span><span>${regState.data.model || '-'}</span></div>
-        <div class="info-row"><span class="info-label">シリアル</span><span>${regState.data.serial || '-'}</span></div>
-        <div class="info-row"><span class="info-label">ジャンル</span><span>${regState.data.genre || ''}</span></div>
-        <div class="info-row"><span class="info-label">保管場所</span><span>${regState.data.location || ''}</span></div>
-        <div class="info-row"><span class="info-label">購入日</span><span>${regState.data.purchaseDate || ''}</span></div>
-        <div class="info-row"><span class="info-label">登録者</span><span>${regState.data.registrant || ''}</span></div>
-        <div class="info-row"><span class="info-label">備考</span><span>${regState.data.remarks || ''}</span></div>
+        <div class="info-row"><span class="info-label">備品名</span><span>${d.itemName || ''}</span></div>
+        <div class="info-row"><span class="info-label">メーカー</span><span>${d.maker || ''}</span></div>
+        <div class="info-row"><span class="info-label">型番</span><span>${d.model || '-'}</span></div>
+        <div class="info-row"><span class="info-label">シリアル</span><span>${d.serial || '-'}</span></div>
+        <div class="info-row"><span class="info-label">ジャンル</span><span>${d.genre || ''}</span></div>
+        <div class="info-row"><span class="info-label">保管場所</span><span>${d.location || ''}</span></div>
+        <div class="info-row"><span class="info-label">購入日</span><span>${d.purchaseDate || ''}</span></div>
+        <div class="info-row"><span class="info-label">登録者</span><span>${d.registrant || ''}</span></div>
+        <div class="info-row"><span class="info-label">備考</span><span>${d.remarks || ''}</span></div>
         <div class="info-row"><span class="info-label">ラベル種別</span><span>${codeTypeLabel}</span></div>
         <div class="info-row"><span class="info-label">テープ幅</span><span>${tapeWidth} mm</span></div>
         <div class="info-row"><span class="info-label">ハーフカット</span><span>${halfcutOn ? 'あり' : 'なし'}</span></div>

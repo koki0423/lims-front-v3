@@ -39,6 +39,9 @@ export const API = {
 
         // ラベル印刷
         printLabel: (payload) => client.post('/api/v2/assets/print', payload),
+        
+        // バッチ印刷
+        printBatch: (payload) => client.post('/api/v2/assets/print/batch', payload),
 
         // マスタ一覧取得
         fetchMasters: () => client.get('/api/v2/assets/masters'),
