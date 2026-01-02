@@ -240,7 +240,7 @@ async function executeRegistration(payloads) {
 
 // 一括登録用ファイルアップロード処理
 async function uploadCsv() {
-    const fileInput = document.getElementById('file-csv'); // ファイル選択inputのID
+    const fileInput = document.getElementById('file-csv');
     const labelType = document.getElementById('labelCodeType').value;
     const tapeWidth = document.getElementById('labelTapeWidth').value;
     const halfcut = document.getElementById('labelHalfcut').checked;
