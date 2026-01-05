@@ -1,19 +1,11 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { scanStudentIdWithRetry } from "../../js/nfcReader.js";
+import { AppState } from '../../js/app_state.js';
 
 // =====================================
 // 定数・ヘルパ
 // =====================================
-
-// ジャンル定義
-const GENRES = [
-    { id: 1, code: 'IND', name: '個人' },
-    { id: 2, code: 'OFS', name: '事務' },
-    { id: 3, code: 'FAC', name: 'ファシリティ' },
-    { id: 4, code: 'EMB', name: '組込みシステム' },
-    { id: 5, code: 'ADV', name: '高度情報演習' },
-];
 
 // 登録時の状態管理
 const regState = {
@@ -25,14 +17,43 @@ const regState = {
 // -------------------------------------
 // GENRE 関連ヘルパ
 // -------------------------------------
+
+function renderGenreOptions() {
+    console.log('Rendering genre options...');
+    const select = document.getElementById('reg-genre-select');
+    if (!select) return;
+
+    // 現在の選択値を保持（画面を行き来したとき用）
+    const currentVal = select.value;
+
+    // 一旦リセット
+    select.innerHTML = '<option value="">選択してください</option>';
+
+    // AppStateから有効なジャンルのみ取得してoption生成
+    AppState.genres.forEach(g => {
+        if (g.is_disabled) return; // 無効なものは表示しない
+
+        const option = document.createElement('option');
+        // 保存するのは ID でも 名前 でも設計次第ですが、
+        // 今までのロジックが名前ベースなら g.name、IDベースなら g.id
+        // ここでは画面表示と整合性を取るため、nameをvalueにする例で書きます
+        option.value = g.name;
+        option.textContent = g.name;
+
+        // 復元処理
+        if (currentVal === g.name) option.selected = true;
+        select.appendChild(option);
+    });
+}
+
 function genreByName(name) {
     if (!name) return null;
-    return GENRES.find(g => g.name === name) || null;
+    return AppState.genres.find(g => g.name === name) || null;
 }
 
 function genreById(id) {
     const target = Number(id);
-    return GENRES.find(g => g.id === target) || null;
+    return AppState.genres.find(g => g.id === target) || null;
 }
 
 // -------------------------------------
@@ -353,6 +374,11 @@ window.RegController = {
 // Router から呼ばれる初期化フック
 // =====================================
 export function initRegistration(step) {
+    if (step === 'step1') {
+        renderGenreOptions();
+        const form = document.getElementById('form-reg-1');
+        if (form && regState.data) restoreFormData(form, regState.data);
+    }
     if (step === 'step2') {
         const form = document.getElementById('form-reg-1');
         if (form) restoreFormData(form, regState.data);

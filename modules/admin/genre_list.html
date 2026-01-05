@@ -1,0 +1,29 @@
+<div class="screen-content">
+    <h2>ジャンル管理</h2>
+
+    <div class="form-group">
+        <label>新規追加</label>
+        <div class="input-with-btn">
+            <input type="text" id="new-genre-name" placeholder="ジャンル名 (例: 消耗品)">
+            <input type="text" id="new-genre-code" placeholder="コード (例: SUP)" style="width: 100px;">
+            <button class="primary-btn" onclick="AdminController.addGenre()">追加</button>
+        </div>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>コード</th>
+                <th>状態</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="genre-list-body"></tbody>
+    </table>
+    
+    <div class="nav-buttons">
+        <button class="back-btn" onclick="Router.to('admin-main')">戻る</button>
+    </div>
+</div>

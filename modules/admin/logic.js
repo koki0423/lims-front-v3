@@ -1,12 +1,17 @@
 import { Router } from '../../js/router.js';
+import { API } from '../../js/api.js';
+import { AppState } from '../../js/app_state.js';
 
 window.AdminController = {
+    // ===============================================
+    // ログイン・管理者登録関連
+    // ===============================================
+
     // NFCボタン用モック
     mockNfcLogin() {
         const idInput = document.getElementById('admin-id');
         if (idInput) {
             idInput.value = 'admin';
-            // ユーザービリティのため、パスワード欄にフォーカスを移動
             document.getElementById('admin-pass').focus();
         }
     },
@@ -15,17 +20,14 @@ window.AdminController = {
     login() {
         const id = document.getElementById('admin-id').value;
         const pass = document.getElementById('admin-pass').value;
-        const errorMsg = document.getElementById('login-error-msg'); // エラー表示用
+        const errorMsg = document.getElementById('login-error-msg');
 
-        // エラーメッセージをリセット
         if (errorMsg) errorMsg.textContent = '';
 
-        // ★判定ロジック: admin / admin で成功
         if (id === 'admin' && pass === 'admin') {
             console.log(`Admin Login Success: ${id}`);
             Router.to('admin-main');
         } else {
-            // 失敗時
             if (errorMsg) {
                 errorMsg.textContent = 'ログインに失敗しました。IDまたはパスワードが違います。';
             } else {
@@ -36,7 +38,6 @@ window.AdminController = {
 
     // ログアウト処理
     logout() {
-        // セッション破棄などの処理があればここに記述
         alert('ログアウトしました');
         Router.to('main-menu');
     },
@@ -49,49 +50,108 @@ window.AdminController = {
     // 管理者追加登録実行
     submitRegister() {
         const form = document.getElementById('form-admin-reg');
-        const errorMsg = document.getElementById('register-error-msg'); // HTMLで付けたIDを取得
+        const errorMsg = document.getElementById('register-error-msg');
 
-        // メッセージを一旦クリア
         if (errorMsg) errorMsg.textContent = '';
 
-        // バリデーションチェック
-        // checkValidity() は true/false を返すだけ
-        // reportValidity() は true/false を返しつつ、ブラウザ標準の吹き出しも出す
         if (!form.reportValidity()) {
-            // --- バリデーションNGの場合 ---
             if (errorMsg) {
                 errorMsg.textContent = '入力に不備があります。必須項目を入力してください。';
             }
-            return; // 処理をここで止める
+            return;
         }
 
-        // --- バリデーションOKの場合 ---
-
-        // ここでパスワードの長さチェックなどを独自に入れたい場合はこう書く
         const formData = new FormData(form);
-        const password = formData.get('password'); // name="password" の値を取得
+        const password = formData.get('password');
 
         if (password.length < 4) {
             if (errorMsg) errorMsg.textContent = 'パスワードは4文字以上で設定してください。';
             return;
         }
 
-        // すべてOKなら登録完了処理へ
         alert('管理者を追加登録しました');
         Router.to('admin-main');
-
-        // CommonControllerを使う場合
-        // window.CommonController.showComplete('管理者を登録しました');
-
-        // ※以前の話にあった「戻り先」の問題は一旦置いておき、まずはこれで動くか確認
     },
 
-    // CommonControllerの拡張が面倒な場合の代替submit
     submitRegisterWithAlert() {
         const form = document.getElementById('form-admin-reg');
         if (!form.reportValidity()) return;
 
         alert('管理者を追加登録しました');
         Router.to('admin-main');
+    },
+
+
+    // ===============================================
+    // 備品ジャンル管理
+    // ===============================================
+
+    async initGenreMaster() {
+        this.renderGenreList();
+    },
+
+    async renderGenreList() {
+        // 管理画面なので全件取得 (?all=true)
+        const genres = await API.genres.list(true);
+        const tbody = document.getElementById('genre-list-body');
+        if (!tbody) return; // 画面遷移タイミングによっては無い場合があるのでガード
+
+        tbody.innerHTML = genres.map(g => {
+            const disabledStyle = g.is_disabled ? 'background:#eee; color:#999;' : '';
+            const statusText = g.is_disabled ? '無効' : '有効';
+            const btnText = g.is_disabled ? '有効化' : '無効化';
+            const nextState = !g.is_disabled;
+
+            return `
+            <tr style="${disabledStyle}">
+                <td>${g.id}</td>
+                <td>${g.name}</td>
+                <td>${g.code}</td>
+                <td>${statusText}</td>
+                <td>
+                    <button class="sm-btn" onclick="AdminController.toggleGenre(${g.id}, ${nextState}, '${g.name}', '${g.code}')">
+                        ${btnText}
+                    </button>
+                </td>
+            </tr>
+            `;
+        }).join('');
+    },
+
+    async addGenre() {
+        const name = document.getElementById('new-genre-name').value;
+        const code = document.getElementById('new-genre-code').value;
+        if (!name || !code) return alert('入力してください');
+
+        try {
+            await API.genres.create({ name, code });
+            alert('追加しました');
+
+            await AppState.initMasterData(); // マスタ再読み込み
+            this.renderGenreList();
+
+            document.getElementById('new-genre-name').value = '';
+            document.getElementById('new-genre-code').value = '';
+        } catch (e) {
+            alert('追加失敗');
+        }
+    },
+
+    async toggleGenre(id, nextIsDisabledState, name, code) {
+        const action = nextIsDisabledState ? '無効化' : '有効化';
+        if (!confirm(`${name} を${action}しますか？`)) return;
+
+        try {
+            await API.genres.update(id, {
+                name: name,
+                code: code,
+                is_disabled: nextIsDisabledState
+            });
+
+            await AppState.initMasterData();
+            this.renderGenreList();
+        } catch (e) {
+            alert('更新失敗: ' + e.message);
+        }
     }
 };

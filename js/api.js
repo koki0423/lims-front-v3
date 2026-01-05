@@ -91,5 +91,11 @@ export const API = {
     admin: {
         login: (id, password) => client.post('/login', { id, password }),
         registerUser: (data) => client.post('/users', data),
+    },
+    
+    genres: {
+        list: (all = false) => client.get(`/api/v2/genres${all ? '?all=true' : ''}`),
+        create: (payload) => client.post('/api/v2/genres', payload),
+        update: (id, payload) => client.put(`/api/v2/genres/${id}`, payload),
     }
 };

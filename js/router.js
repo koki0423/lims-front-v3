@@ -2,7 +2,7 @@ import { initRegistration } from '../modules/registration/logic.js';
 import { initDisposal } from '../modules/disposal/logic.js';
 import { initItemList } from '../modules/item_list/logic.js';
 import { initLendReturn } from '../modules/lend_return/logic.js';
-import { initSearch,initSearchList } from '../modules/search/logic.js';
+import { initSearch, initSearchList } from '../modules/search/logic.js';
 import { initComplete } from '../modules/common/logic.js';
 import '../modules/admin/logic.js';
 
@@ -13,9 +13,28 @@ const routes = {
     // === 新規登録 ===
     'reg-select': { path: 'modules/registration/step1.html', title: '新規登録' },
     'reg-batch': { path: 'modules/registration/batchReg.html', title: '新規登録 > 管理方法選択 > 一括登録' },
-    'reg-input-1': { path: 'modules/registration/step2.html', title: '新規登録 > 基本', init: () => initRegistration('step2') },
-    'reg-input-2': { path: 'modules/registration/step3.html', title: '新規登録 > 詳細', init: () => initRegistration('step3') },
-    'reg-confirm': { path: 'modules/registration/confirm.html', title: '新規登録 > 確認', init: () => initRegistration('confirm') },
+    'reg-input-1': {
+        path: 'modules/registration/step2.html',
+        title: '新規登録 > 基本',
+        init: async () => {
+            initRegistration('step1');
+        }
+    },
+    'reg-input-2': {
+        path: 'modules/registration/step3.html',
+        title: '新規登録 > 詳細',
+        init: async () => {
+            initRegistration('step3');
+        }
+    },
+
+    'reg-confirm': {
+        path: 'modules/registration/confirm.html',
+        title: '新規登録 > 確認',
+        init: async () => {
+            initRegistration('confirm');
+        }
+    },
 
     // === 廃棄 ===
     'disposal-top': { path: 'modules/disposal/top.html', title: '廃棄メニュー' },
@@ -46,7 +65,7 @@ const routes = {
     'return-input': {
         path: 'modules/lend_return/return_input.html',
         title: '返却登録',
-        init: () => initLendReturn('return-input') // 検索結果を引数に初期化
+        init: () => initLendReturn('return-input')
     },
     'return-confirm': {
         path: 'modules/lend_return/return_confirm.html',
@@ -78,10 +97,14 @@ const routes = {
     },
 
     // === 管理者機能 ===
-    'admin-login':    { path: 'modules/admin/login.html',     title: '管理者ログイン' },
-    'admin-main':     { path: 'modules/admin/main_menu.html', title: '管理者メニュー' },
-    'admin-register': { path: 'modules/admin/register.html',  title: '管理者追加登録' },
-
+    'admin-login': { path: 'modules/admin/login.html', title: '管理者ログイン' },
+    'admin-main': { path: 'modules/admin/main_menu.html', title: '管理者メニュー' },
+    'admin-register': { path: 'modules/admin/register.html', title: '管理者追加登録' },
+    'admin-genres': {
+        path: 'modules/admin/genre_list.html',
+        title: '備品ジャンル管理',
+        init: () => window.AdminController.initGenreMaster()
+    },
 };
 
 export const Router = {
