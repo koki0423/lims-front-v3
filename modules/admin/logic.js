@@ -1,30 +1,41 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
+import { scanStudentIdWithRetry } from "../../js/nfcReader.js";
 
 window.AdminController = {
     // ===============================================
     // ログイン・管理者登録関連
     // ===============================================
 
-    // NFCボタン用モック
-    mockNfcLogin() {
-        const idInput = document.getElementById('admin-id');
-        if (idInput) {
-            idInput.value = 'admin';
-            document.getElementById('admin-pass').focus();
+    // NFCボタン
+    async NfcRead() {
+        const input = document.getElementById('admin-id');
+        try {
+            const result = await scanStudentIdWithRetry(9, 2000);
+            if (result.ok) {
+                console.log("OK:", result.studentId);
+                input.value = result.studentId;
+            } else {
+                console.log("NG:", result.error);
+                input.value = "error";
+            }
+        } catch (err) {
+            console.error("scan error:", err);
+            if (input) input.value = "error";
         }
     },
 
     // ログイン判定
     login() {
+        const inputId="AL21034"; // テスト用固定ID
         const id = document.getElementById('admin-id').value;
         const pass = document.getElementById('admin-pass').value;
         const errorMsg = document.getElementById('login-error-msg');
 
         if (errorMsg) errorMsg.textContent = '';
 
-        if (id === 'admin' && pass === 'admin') {
+        if (id === inputId && pass === 'admin') {
             console.log(`Admin Login Success: ${id}`);
             Router.to('admin-main');
         } else {
