@@ -8,8 +8,9 @@
         <div class="form-group">
             <label>学籍番号 (NFC入力のみ)</label>
             <div class="input-with-btn">
-                <input type="text" id="admin-id" placeholder="スキャンしてください">
-                <button type="button" class="nfc-btn" onclick="AdminController.mockNfcLogin()">NFC入力</button>
+                <input type="text" name="adminId" id="admin-id" placeholder="スキャンしてください" readonly required
+                    style="background:#eee;">
+                <button type="button" class="nfc-btn" onclick="AdminController.NfcRead()">NFC入力</button>
             </div>
         </div>
         <div class="form-group">
