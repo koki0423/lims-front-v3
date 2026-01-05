@@ -1,15 +1,8 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
+import { AppState } from '../../js/app_state.js';
 
 // === 定数定義 ===
-const GENRES = [
-    { id: 1, code: 'IND', name: '個人' },
-    { id: 2, code: 'OFS', name: '事務' },
-    { id: 3, code: 'FAC', name: 'ファシリティ' },
-    { id: 4, code: 'EMB', name: '組込みシステム' },
-    { id: 5, code: 'ADV', name: '高度情報演習' },
-];
-
 // ステータス定義 (ID -> 表示名)
 const STATUS_MAP = {
     1: '正常',
@@ -28,7 +21,7 @@ const searchState = {
 
 // === ヘルパー関数 ===
 function genreById(id) {
-    return GENRES.find(g => g.id === Number(id)) || null;
+    return AppState.genres.find(g => g.id === Number(id)) || null;
 }
 
 function getStatusName(id) {

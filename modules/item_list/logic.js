@@ -1,5 +1,5 @@
-import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
+import { AppState } from '../../js/app_state.js';
 
 // === 状態管理 ===
 const itemListState = {
@@ -245,6 +245,8 @@ function renderList() {
         const displayId = item.management_number || item.asset_id || '-';
         const displayName = item.name || `(マスタID: ${item.asset_master_id})`;
         const mgmtNum = item.management_number || item.asset_id;
+        const genreObj = AppState.genres.find(g => g.id === item.genre_id);
+        const genreName = genreObj ? genreObj.name : '-';
 
         return `
             <tr>
@@ -268,7 +270,7 @@ function renderList() {
 // ページボタン生成ロジック
 function renderPaginationControls(container, totalPages, currentPage) {
     if (!container) return;
-    
+
     let html = '';
 
     // [前へ] ボタン
@@ -283,7 +285,7 @@ function renderPaginationControls(container, totalPages, currentPage) {
             if (html.slice(-3) !== '...') html += '<span style="padding:0 5px;">...</span>';
             continue;
         }
-        
+
         const activeClass = i === currentPage ? 'active' : '';
         html += `<button class="page-btn ${activeClass}" onclick="ItemListController.changePage(${i})">${i}</button>`;
     }
