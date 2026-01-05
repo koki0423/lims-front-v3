@@ -9,7 +9,9 @@ const disposalState = {
 };
 
 const historyState = {
-    items: []
+    items: [],
+    currentPage: 1,
+    itemsPerPage: 20
 };
 
 // 管理番号の正規化
@@ -114,6 +116,17 @@ window.DisposalController = {
             disposalState.submitting = false;
         }
     },
+    // ページネーション操作用メソッド
+    changePerPage(val) {
+        historyState.itemsPerPage = Number(val);
+        historyState.currentPage = 1; // 件数変えたら1ページ目へ
+        renderTable();
+    },
+
+    changePage(page) {
+        historyState.currentPage = Number(page);
+        renderTable();
+    }
 };
 
 export function initDisposal(view) {
@@ -168,9 +181,10 @@ export async function initDisposalHistory() {
 
     try {
         const response = await API.disposal.fetchHistory();
-        console.log('Disposal history response:', response);
         const data = Array.isArray(response) ? response : (response.items || []);
+        
         historyState.items = data;
+        historyState.currentPage = 1; // 初期化時は1ページ目に戻す
 
         renderTable();
     } catch (error) {
@@ -183,14 +197,31 @@ export async function initDisposalHistory() {
 
 function renderTable() {
     const tbody = document.getElementById('disposal-history-body');
+    const paginationDiv = document.getElementById('pagination-controls'); // 追加
     if (!tbody) return;
 
+    // データがない場合
     if (historyState.items.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">廃棄履歴はありません</td></tr>';
+        if(paginationDiv) paginationDiv.innerHTML = '';
         return;
     }
 
-    tbody.innerHTML = historyState.items.map(item => {
+    // --- ページ計算 ---
+    const totalItems = historyState.items.length;
+    const totalPages = Math.ceil(totalItems / historyState.itemsPerPage) || 1;
+
+    // 現在ページ補正
+    if (historyState.currentPage > totalPages) historyState.currentPage = totalPages;
+
+    const startIndex = (historyState.currentPage - 1) * historyState.itemsPerPage;
+    const endIndex = startIndex + historyState.itemsPerPage;
+    
+    // 表示データ切り出し
+    const displayItems = historyState.items.slice(startIndex, endIndex);
+
+    // --- テーブル描画 ---
+    tbody.innerHTML = displayItems.map(item => {
         const dateObj = new Date(item.disposed_at);
         const dateStr = isNaN(dateObj.getTime())
             ? '-'
@@ -209,4 +240,25 @@ function renderTable() {
             </tr>
         `;
     }).join('');
+
+    // --- ページネーションボタン描画 ---
+    if (paginationDiv) {
+        let html = '';
+        const current = historyState.currentPage;
+
+        // [前へ]
+        html += `<button class="page-btn" ${current === 1 ? 'disabled' : ''} onclick="DisposalController.changePage(${current - 1})">＜</button>`;
+
+        // [番号]
+        for (let i = 1; i <= totalPages; i++) {
+             // ページ数が多い場合の省略ロジックが必要ならここに追加（今回は全件出し）
+            const activeClass = i === current ? 'active' : '';
+            html += `<button class="page-btn ${activeClass}" onclick="DisposalController.changePage(${i})">${i}</button>`;
+        }
+
+        // [次へ]
+        html += `<button class="page-btn" ${current === totalPages ? 'disabled' : ''} onclick="DisposalController.changePage(${current + 1})">＞</button>`;
+
+        paginationDiv.innerHTML = html;
+    }
 }

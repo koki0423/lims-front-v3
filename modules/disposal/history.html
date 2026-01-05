@@ -2,6 +2,18 @@
     <h2>廃棄履歴一覧</h2>
 
     <div style="padding: 10px; border-radius: 4px;">
+        <div class="pagination-container">
+            <div class="rows-per-page">
+                <label>表示件数:</label>
+                <select onchange="DisposalController.changePerPage(this.value)">
+                    <option value="10">10件</option>
+                    <option value="20" selected>20件</option>
+                    <option value="50">50件</option>
+                </select>
+            </div>
+            <div id="pagination-controls" class="pagination-controls"></div>
+        </div>
+
         <table class="data-table" style="width: 100%;">
             <thead>
                 <tr>
