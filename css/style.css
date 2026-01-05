@@ -430,3 +430,56 @@ button.primary-btn {
     gap: 10px;
     margin-top: 20px;
 }
+
+/* ページネーション全体のレイアウト */
+.pagination-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    padding: 10px 0;
+    border-top: 1px solid #eee;
+}
+
+.rows-per-page label {
+    font-size: 0.9em;
+    margin-right: 5px;
+}
+
+.rows-per-page select {
+    padding: 4px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+}
+
+/* ページ送りボタン */
+.pagination-controls {
+    display: flex;
+    gap: 5px;
+}
+
+.page-btn {
+    padding: 5px 10px;
+    border: 1px solid #ddd;
+    background: #fff;
+    cursor: pointer;
+    border-radius: 4px;
+    min-width: 32px;
+    transition: all 0.2s;
+}
+
+.page-btn:hover {
+    background: #f0f0f0;
+}
+
+.page-btn.active {
+    background: #006400; /* メインカラーに合わせて調整 */
+    color: #fff;
+    border-color: #006400;
+}
+
+.page-btn:disabled {
+    color: #ccc;
+    cursor: not-allowed;
+    background: #f9f9f9;
+}

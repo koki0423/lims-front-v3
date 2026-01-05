@@ -4,7 +4,11 @@ import { API } from '../../js/api.js';
 // === 状態管理 ===
 const itemListState = {
     items: [],
-    currentFilter: null // 空文字=全表示, "1"=正常, "2"=故障...
+    currentFilter: null, // 空文字=全表示, "1"=正常, "2"=故障...
+
+    // ページネーション用
+    currentPage: 1,
+    itemsPerPage: 20
 };
 
 // ステータス定義（JSONのstatus_idに対応）
@@ -26,6 +30,7 @@ window.ItemListController = {
             itemListState.currentFilter = status;
         }
 
+        itemListState.currentPage = 1;
         renderList();
         updateFilterButtonStyles();
     },
@@ -61,17 +66,17 @@ window.ItemListController = {
             statusSelect.disabled = false;
             locInput.disabled = false;
             notesInput.disabled = false;
-            
+
             // 数量ロックの判定 (シリアル有無)
             const isSerial = (asset.serial && asset.serial.trim() !== "");
             if (isSerial) {
                 qtyInput.disabled = true;
                 qtyInput.style.backgroundColor = "#f5f5f5";
-                if(qtyMsg) qtyMsg.style.display = "inline";
+                if (qtyMsg) qtyMsg.style.display = "inline";
             } else {
                 qtyInput.disabled = false;
                 qtyInput.style.backgroundColor = "#fff";
-                if(qtyMsg) qtyMsg.style.display = "none";
+                if (qtyMsg) qtyMsg.style.display = "none";
             }
 
 
@@ -92,7 +97,7 @@ window.ItemListController = {
                 statusSelect.disabled = true;
                 qtyInput.disabled = true;      // バルク品であっても変更不可
                 locInput.disabled = true;      // 場所変更も不可
-                
+
                 // 視覚的フィードバック
                 qtyInput.style.backgroundColor = "#f5f5f5";
                 locInput.style.backgroundColor = "#f5f5f5";
@@ -116,7 +121,7 @@ window.ItemListController = {
 
     async update() {
         const id = document.getElementById('edit-asset-id').value;
-        
+
         const statusVal = document.getElementById('edit-status').value;
         const locVal = document.getElementById('edit-location').value;
         const notesVal = document.getElementById('edit-notes').value;
@@ -137,21 +142,34 @@ window.ItemListController = {
         try {
             // PUT /assets/:asset_id
             await API.assets.update(id, payload);
-            
+
             alert('更新しました');
             this.closeModal();
-            
+
             if (typeof initItemList === 'function') {
                 initItemList();
             } else {
-                 window.location.reload(); 
+                window.location.reload();
             }
-            
+
         } catch (error) {
             console.error(error);
             alert('更新に失敗しました: ' + (error.response?.data?.error || error.message));
         }
-    }
+    },
+
+    // 表示件数変更
+    changePerPage(val) {
+        itemListState.itemsPerPage = Number(val);
+        itemListState.currentPage = 1; // 件数変えたら1ページ目に戻す
+        renderList();
+    },
+
+    // ページ切り替え
+    changePage(page) {
+        itemListState.currentPage = Number(page);
+        renderList();
+    },
 };
 
 // === 初期化処理 ===
@@ -187,25 +205,41 @@ export async function initItemList() {
 // === リスト描画 ===
 function renderList() {
     const tbody = document.getElementById('item-list-body');
+    const paginationDiv = document.getElementById('pagination-controls');
     if (!tbody) return;
 
+    // 1. まずフィルタリング（全件から絞り込み）
     const filteredItems = itemListState.items.filter(item => {
         if (itemListState.currentFilter === null || itemListState.currentFilter === '') {
             return true;
         }
-
-        // 表示と同じロジックで statusId を決める
         const statusId = item.status_id || 1;
-
         return String(statusId) === String(itemListState.currentFilter);
     });
 
-    if (filteredItems.length === 0) {
+    // 2. ページネーション計算
+    const totalItems = filteredItems.length;
+    const totalPages = Math.ceil(totalItems / itemListState.itemsPerPage) || 1;
+
+    // 現在ページが総ページを超えていたら補正 (例: 5ページ目にいてフィルタしたら2ページ分しかなくなった場合)
+    if (itemListState.currentPage > totalPages) {
+        itemListState.currentPage = totalPages;
+    }
+
+    const startIndex = (itemListState.currentPage - 1) * itemListState.itemsPerPage;
+    const endIndex = startIndex + itemListState.itemsPerPage;
+
+    // 3. 表示するデータだけ切り出す
+    const displayItems = filteredItems.slice(startIndex, endIndex);
+
+    // 4. データ描画
+    if (displayItems.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">該当する備品はありません</td></tr>';
+        paginationDiv.innerHTML = ''; // ボタンも消す
         return;
     }
 
-    tbody.innerHTML = filteredItems.map(item => {
+    tbody.innerHTML = displayItems.map(item => {
         const statusId = item.status_id || 1;
         const statusObj = STATUS_MAP[statusId] || { name: '不明', class: 'badge-gray' };
         const displayId = item.management_number || item.asset_id || '-';
@@ -222,11 +256,43 @@ function renderList() {
                 </td>
                 <td style="text-align:center; padding: 12px 5px;">
                     <button class="sm-btn" onclick="ItemListController.edit('${mgmtNum}')">編集</button>
-                    <button class="sm-btn" onclick="ItemListController.lend('${mgmtNum}')">貸出</button>
-                </td>
+                    </td>
             </tr>
         `;
     }).join('');
+
+    // 5. ページネーションボタン描画
+    renderPaginationControls(paginationDiv, totalPages, itemListState.currentPage);
+}
+
+// ページボタン生成ロジック
+function renderPaginationControls(container, totalPages, currentPage) {
+    if (!container) return;
+    
+    let html = '';
+
+    // [前へ] ボタン
+    const prevDisabled = currentPage === 1 ? 'disabled' : '';
+    html += `<button class="page-btn" ${prevDisabled} onclick="ItemListController.changePage(${currentPage - 1})">＜</button>`;
+
+    // ページ番号ボタン (簡易版: 全部出すと多いので、最初・最後・現在周辺だけ出すのが一般的ですが、まずはシンプルに全部出します)
+    // ページ数が多すぎる場合の省略ロジックを入れるならここを調整
+    for (let i = 1; i <= totalPages; i++) {
+        // ページ数が多い場合、カレント周辺のみ表示するロジック (例)
+        if (totalPages > 10 && Math.abs(currentPage - i) > 2 && i !== 1 && i !== totalPages) {
+            if (html.slice(-3) !== '...') html += '<span style="padding:0 5px;">...</span>';
+            continue;
+        }
+        
+        const activeClass = i === currentPage ? 'active' : '';
+        html += `<button class="page-btn ${activeClass}" onclick="ItemListController.changePage(${i})">${i}</button>`;
+    }
+
+    // [次へ] ボタン
+    const nextDisabled = currentPage === totalPages ? 'disabled' : '';
+    html += `<button class="page-btn" ${nextDisabled} onclick="ItemListController.changePage(${currentPage + 1})">＞</button>`;
+
+    container.innerHTML = html;
 }
 
 // === ボタンのアクティブ表示更新 ===

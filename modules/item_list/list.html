@@ -25,6 +25,20 @@
         <tbody id="item-list-body">
         </tbody>
     </table>
+    <div class="pagination-container">
+    <div class="rows-per-page">
+        <label>表示件数:</label>
+        <select onchange="ItemListController.changePerPage(this.value)">
+            <option value="10">10件</option>
+            <option value="20" selected>20件</option>
+            <option value="50">50件</option>
+            <option value="100">100件</option>
+        </select>
+    </div>
+
+    <div id="pagination-controls" class="pagination-controls">
+        </div>
+</div>
     <div class="nav-buttons">
         <button class="back-btn" onclick="Router.to('main-menu')">戻る</button>
     </div>
