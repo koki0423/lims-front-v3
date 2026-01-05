@@ -2,7 +2,7 @@ import { initRegistration } from '../modules/registration/logic.js';
 import { initDisposal } from '../modules/disposal/logic.js';
 import { initItemList } from '../modules/item_list/logic.js';
 import { initLendReturn } from '../modules/lend_return/logic.js';
-import { initSearch } from '../modules/search/logic.js';
+import { initSearch,initSearchList } from '../modules/search/logic.js';
 import { initComplete } from '../modules/common/logic.js';
 import '../modules/admin/logic.js';
 
@@ -63,6 +63,11 @@ const routes = {
         path: 'modules/search/result.html',
         title: '検索結果',
         init: () => initSearch('result') // データ表示処理
+    },
+    'search-list': {
+        path: 'modules/search/list.html',
+        title: '検索結果一覧',
+        init: () => initSearchList()
     },
 
     // === 共通完了画面 ===

@@ -63,6 +63,9 @@ export const API = {
 
         // 集計情報取得
         fetchSummary: () => client.get('/api/v2/assets/summary'),
+
+        // 名前で検索 (クエリパラメータで渡す)
+        searchByName: (name) => client.get(`/api/v2/assets/search?name=${encodeURIComponent(name)}`),
     },
 
     // ラベル印刷（assetsのやつとなんで分けたのかわからん忘れた）

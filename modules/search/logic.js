@@ -1,14 +1,7 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 
-// 状態
-const searchState = {
-    joinedAssets: null,   // master と join 済みの配列
-    masters: null,
-    loaded: false,
-};
-
-// ジャンル定義（Search.js そのまま）
+// === 定数定義 ===
 const GENRES = [
     { id: 1, code: 'IND', name: '個人' },
     { id: 2, code: 'OFS', name: '事務' },
@@ -17,282 +10,129 @@ const GENRES = [
     { id: 5, code: 'ADV', name: '高度情報演習' },
 ];
 
+// ステータス定義 (ID -> 表示名)
+const STATUS_MAP = {
+    1: '正常',
+    2: '故障',
+    3: '修理中',
+    4: '貸出中',
+    5: '廃棄済み',
+    6: '紛失'
+};
+
+// === 状態管理オブジェクト ===
+const searchState = {
+    result: null, // 検索結果1件をここに保持
+    candidates: [],   // 一覧画面用の検索結果リスト
+};
+
+// === ヘルパー関数 ===
 function genreById(id) {
-    const target = Number(id);
-    for (let i = 0; i < GENRES.length; i++) {
-        if (GENRES[i].id === target) {
-            return GENRES[i];
-        }
-    }
-    return null;
+    return GENRES.find(g => g.id === Number(id)) || null;
 }
 
-// 管理番号のフォールバック生成（date-fns なし版）
-function buildMgmtCode(master, asset) {
-    if (!master || !master.asset_master_id) {
-        return '';
-    }
-
-    const g = genreById(master.genre_id);
-    const genreCode = g ? g.code : '';
-
-    let dateSrc = null;
-    if (master.created_at) {
-        dateSrc = master.created_at;
-    } else if (asset && asset.purchased_at) {
-        dateSrc = asset.purchased_at;
-    }
-
-    let ymd = '';
-    if (dateSrc) {
-        try {
-            const d = new Date(dateSrc);
-            if (!isNaN(d.getTime())) {
-                const y = d.getFullYear();
-                const m = String(d.getMonth() + 1).padStart(2, '0');
-                const day = String(d.getDate()).padStart(2, '0');
-                ymd = '' + y + m + day;
-            }
-        } catch (e) {
-            console.warn('date parse error:', e);
-            ymd = '';
-        }
-    }
-
-    const idPadded = String(master.asset_master_id).padStart(4, '0');
-
-    if (!genreCode || !ymd) {
-        return '';
-    }
-    return genreCode + '-' + ymd + '-' + idPadded;
+function getStatusName(id) {
+    return STATUS_MAP[Number(id)] || '不明';
 }
 
-// 文字列正規化
-function normalize(str) {
-    if (!str) {
-        return '';
-    }
-    return String(str).toLowerCase().trim();
+// APIレスポンス (master + asset) を画面表示用のフラットなオブジェクトに変換
+function formatPairData(data) {
+    const m = data.master || {};
+    const a = data.asset || {};
+
+    const g = genreById(m.genre_id);
+
+    return {
+        // 表示に必要な情報をフラットにまとめる
+        name: m.name || a.name || '(名称未設定)',
+        management_number: m.management_number || a.management_number,
+        manufacturer: m.manufacturer,
+        model: m.model,
+        serial: a.serial,
+        genre_name: g ? g.name : '-',
+
+        // 場所: 現在地(location)があれば優先、なければ定位置(default)
+        current_location: a.location || a.default_location || '-',
+
+        purchased_at: a.purchased_at,
+        owner: a.owner,             // 登録者/管理者
+        status_id: a.status_id,     // ステータスID
+        status_name: getStatusName(a.status_id),
+
+        // 備考: APIによっては notes だったり remarks だったりするので調整
+        notes: a.notes || a.remarks || m.notes || ''
+    };
 }
 
-function extractListPayload(resData, preferredKeys) {
-    if (Array.isArray(resData)) {
-        return resData;
-    }
-    if (!resData || typeof resData !== 'object') {
-        return [];
-    }
 
-    if (Array.isArray(resData.items)) {
-        return resData.items;
-    }
-
-    const data = resData.data;
-    if (Array.isArray(data)) {
-        return data;
-    }
-    if (data && typeof data === 'object') {
-        if (Array.isArray(data.items)) {
-            return data.items;
-        }
-    }
-
-    // 呼び出し元が示す候補キー
-    if (preferredKeys && Array.isArray(preferredKeys)) {
-        for (let i = 0; i < preferredKeys.length; i++) {
-            const k = preferredKeys[i];
-            const v = resData[k];
-            if (Array.isArray(v)) {
-                return v;
-            }
-            if (v && typeof v === 'object' && Array.isArray(v.items)) {
-                return v.items;
-            }
-        }
-    }
-
-    const entries = Object.entries(resData);
-    for (let i = 0; i < entries.length; i++) {
-        const pair = entries[i];
-        const v = pair[1];
-        if (Array.isArray(v) && (v.length === 0 || typeof v[0] === 'object')) {
-            return v;
-        }
-    }
-
-    return [];
-}
-
-// masters + assets を 1 回だけ取得して join
-async function loadJoinedAssetsOnce() {
-    if (searchState.loaded && Array.isArray(searchState.joinedAssets)) {
-        return searchState.joinedAssets;
-    }
-
-    try {
-        // Search.js: Promise.all([fetchMasters, fetchAssets]) の移植
-        const results = await Promise.all([
-            API.assets.fetchMasters(),       // /api/v2/assets/masters
-            API.assets.fetchList(),          // /api/v2/assets
-        ]);
-
-        const mRes = results[0];
-        const aRes = results[1];
-
-        const masters = extractListPayload(
-            mRes,
-            ['masters', 'asset_masters', 'results', 'list', 'rows']
-        );
-        const assets = extractListPayload(
-            aRes,
-            ['assets', 'results', 'list', 'rows']
-        );
-
-        searchState.masters = masters;
-
-        // master.asset_master_id -> master
-        const masterMap = new Map();
-        for (let i = 0; i < masters.length; i++) {
-            const mm = masters[i];
-            masterMap.set(mm.asset_master_id, mm);
-        }
-
-        const joined = [];
-        for (let i = 0; i < assets.length; i++) {
-            const ai = assets[i]; // AssetResponse
-            const master = masterMap.get(ai.asset_master_id) || {};
-            const g = genreById(master.genre_id);
-
-            // master.management_number（優先）→ asset.management_number → フォールバック生成
-            const mgmt =
-                master.management_number ||
-                ai.management_number ||
-                buildMgmtCode(master, ai);
-
-            const joinedItem = {
-                // Asset 側の情報
-                ...ai,
-                // Master 側の情報をマージ
-                name: master.name,
-                manufacturer: master.manufacturer,
-                model: master.model,
-                genre_id: master.genre_id,
-                genre_code: g ? g.code : undefined,
-                genre_name: g ? g.name : undefined,
-                management_number: mgmt,
-            };
-
-            joined.push(joinedItem);
-        }
-
-        searchState.joinedAssets = joined;
-        searchState.loaded = true;
-
-        console.log('Joined assets:', joined);
-        return joined;
-    } catch (e) {
-        console.error('API エラー:', e);
-        alert('備品情報の取得に失敗しました');
-        searchState.joinedAssets = [];
-        searchState.masters = [];
-        searchState.loaded = false;
-        throw e;
-    }
-}
-
-// ==== 画面から叩かれるコントローラ ====
+// === コントローラー ===
 window.SearchController = {
     async performSearch() {
-        const idEl = document.getElementById('search-query');
-        const nameEl = document.getElementById('search-name'); // 備品名入力を追加してる前提
+        const idInput = document.querySelector('input[name="itemId"]'); // 備品番号
+        const nameInput = document.getElementById('search-name');       // 備品名
 
-        const idQuery = idEl ? idEl.value.trim() : '';
-        const nameQuery = nameEl ? nameEl.value.trim() : '';
+        const idQuery = idInput ? idInput.value.trim() : '';
+        const nameQuery = nameInput ? nameInput.value.trim() : '';
 
         if (!idQuery && !nameQuery) {
-            alert('備品番号か備品名を入力してください');
+            alert('検索条件を入力してください');
             return;
         }
 
-        let assets;
         try {
-            assets = await loadJoinedAssetsOnce();
-        } catch {
-            // loadJoinedAssetsOnce 内で alert 済み
+            let results = [];
+
+            // A. 管理番号検索 (1件または0件想定だが、配列で受け取る設計にしておくと汎用的)
+            if (idQuery) {
+                // APIが単一オブジェクトを返す場合は [] で囲む、配列ならそのまま
+                const res = await API.assets.getPair(idQuery);
+                results = Array.isArray(res) ? res : [res];
+            }
+            // B. 名前検索 (複数件ヒットするエンドポイント)
+            else if (nameQuery) {
+                // GET /api/v2/assets/search?name=xxx
+                results = await API.assets.searchByName(nameQuery);
+            }
+
+            if (!results || results.length === 0) {
+                alert('該当する備品は見つかりませんでした');
+                return;
+            }
+
+            // === 分岐ロジック ===
+
+            if (results.length === 1) {
+                // ★ 1件だけなら、直接詳細画面へ (UX向上)
+                // formatPairDataを通して整形し、stateにセット
+                searchState.result = formatPairData(results[0]);
+                Router.to('search-result'); // 詳細画面へ
+            } else {
+                // ★ 複数件なら、候補リストをstateに保存して一覧画面へ
+                searchState.candidates = results;
+                Router.to('search-list');   // 一覧画面へ (router.jsへの登録が必要)
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert('検索中にエラーが発生しました');
+        }
+    },
+
+    // ★追加: 一覧画面で「詳細」ボタンを押したときの処理
+    selectCandidate(index) {
+        // メモリ上の配列からデータを取り出す (API通信なし！)
+        const rawData = searchState.candidates[index];
+
+        if (!rawData) {
+            alert('データの取得に失敗しました');
             return;
         }
 
-        // 1) 管理番号で完全一致検索（OFS-2025...）
-        if (idQuery) {
-            let found = null;
+        // 整形して詳細表示用stateにセット
+        searchState.result = formatPairData(rawData);
 
-            for (let i = 0; i < assets.length; i++) {
-                const a = assets[i];
-                const idCandidate =
-                    a.management_number ||
-                    a.asset_number ||
-                    a.id ||
-                    a.asset_id;
-
-                if (idCandidate && String(idCandidate) === idQuery) {
-                    found = a;
-                    break;
-                }
-            }
-
-            if (found) {
-                searchState.result = found;
-                Router.to('search-result');
-                return;
-            }
-
-            if (!nameQuery) {
-                alert('該当する備品が見つかりません');
-                return;
-            }
-            // 名前も入っているときはこのまま名前検索にフォールバック
-        }
-
-        // 2) 備品名（部分一致）検索
-        if (nameQuery) {
-            const qNorm = normalize(nameQuery);
-            const matches = [];
-
-            for (let i = 0; i < assets.length; i++) {
-                const a = assets[i];
-                const nameNorm = normalize(a.name);
-                if (nameNorm && nameNorm.indexOf(qNorm) !== -1) {
-                    matches.push(a);
-                }
-            }
-
-            if (matches.length === 0) {
-                alert('該当する備品が見つかりません');
-                return;
-            }
-
-            if (matches.length === 1) {
-                searchState.result = matches[0];
-                Router.to('search-result');
-                return;
-            }
-
-            // 複数ヒットしたときは一覧だけ出して番号指定で絞ってもらう
-            let msg = '該当する備品が複数あります。\n\n';
-            for (let i = 0; i < matches.length; i++) {
-                const a = matches[i];
-                const idLabel =
-                    a.management_number ||
-                    a.asset_number ||
-                    a.id ||
-                    a.asset_id ||
-                    '(ID不明)';
-                const nameLabel = a.name || '';
-                msg += '- ' + idLabel + ' : ' + nameLabel + '\n';
-            }
-            msg += '\n備品番号を指定して再検索してください。';
-            alert(msg);
-        }
+        // 詳細画面へ遷移
+        Router.to('search-result');
     },
 
     backToSearch() {
@@ -301,48 +141,78 @@ window.SearchController = {
     }
 };
 
-
-// ==== 画面初期化（routerから呼ばれる想定） ====
+// === 画面初期化 (result.html 表示時) ===
 export function initSearch(view) {
-    if (view !== 'result') {
-        return;
-    }
+    if (view !== 'result') return;
 
     const data = searchState.result;
     if (!data) {
-        alert('不正な遷移です');
-        Router.to('search-top');
+        alert('検索結果がありません');
+        // Router.to('search-top'); 
         return;
     }
 
-    setInputValue('disp-name', data.name);
-    setInputValue('disp-maker', data.manufacturer);
-    setInputValue('disp-model', data.model);
-    setInputValue('disp-serial', data.serial);
-    setInputValue('disp-genre', data.genre_name);
-    setInputValue('disp-location',
-        data.default_location || data.location || data.owner
-    );
-    setInputValue('disp-date',
-        data.purchased_at || data.purchase_date
-    );
-    setInputValue('disp-registrant',
-        data.owner || data.registrant
-    );
-    setInputValue('disp-remarks',
-        data.remarks || data.description
-    );
+    // 値をセットするヘルパー
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = (val === null || val === undefined || val === '') ? '-' : val;
+    };
+
+    setVal('disp-mgmt-num', data.management_number); // ★追加
+    setVal('disp-status', data.status_name);       // ★追加
+
+    setVal('disp-name', data.name);
+    setVal('disp-maker', data.manufacturer);
+    setVal('disp-model', data.model);
+    setVal('disp-serial', data.serial);
+    setVal('disp-genre', data.genre_name);
+    setVal('disp-location', data.current_location);
+
+    // 日付整形 (YYYY-MM-DD)
+    let dateStr = '-';
+    if (data.purchased_at) {
+        try {
+            dateStr = new Date(data.purchased_at).toLocaleDateString('ja-JP');
+        } catch (e) { }
+    }
+    setVal('disp-date', dateStr);
+
+    setVal('disp-registrant', data.owner);
+    setVal('disp-remarks', data.notes);
 }
 
-// ==== 小さなユーティリティ ====
-function setInputValue(id, value) {
-    const el = document.getElementById(id);
-    if (!el) {
+// === 画面初期化 (list.html 表示時) ===
+export function initSearchList() {
+    const tbody = document.getElementById('search-candidates-body');
+    if (!tbody) return;
+
+    if (!searchState.candidates || searchState.candidates.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
         return;
     }
-    if (value === null || value === undefined || value === '') {
-        el.value = '-';
-    } else {
-        el.value = String(value);
-    }
+
+    tbody.innerHTML = searchState.candidates.map((item, index) => {
+        // データ整形 (リスト表示用に簡易的なもの)
+        const m = item.master || {};
+        const a = item.asset || {};
+        const statusName = getStatusName(a.status_id);
+        const mgmtNum = m.management_number || a.management_number || '-';
+        const location = a.location || a.default_location || a.owner || '-';
+
+        return `
+            <tr>
+                <td style="padding: 12px 5px;">${mgmtNum}</td>
+                <td style="padding: 12px 5px;">${m.name || '-'}</td>
+                <td style="padding: 12px 5px;">
+                    <span class="status-badge status-${a.status_id}">${statusName}</span>
+                </td>
+                <td style="padding: 12px 5px;">${location}</td>
+                <td style="text-align: center; padding: 12px 5px;">
+                    <button class="sm-btn" onclick="SearchController.selectCandidate(${index})">
+                        詳細
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
 }

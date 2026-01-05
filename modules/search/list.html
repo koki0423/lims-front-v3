@@ -1,0 +1,24 @@
+<div class="screen-content">
+    <h2>検索結果: 候補一覧</h2>
+    <p>条件に一致する備品が複数見つかりました。</p>
+
+    <div style="background: #fff; padding: 10px; border-radius: 4px; overflow-x: auto;">
+        <table class="data-table" style="width: 100%; min-width: 600px;">
+            <thead>
+                <tr>
+                    <th>管理番号</th>
+                    <th>備品名</th>
+                    <th>状態</th>
+                    <th>場所/利用者</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="search-candidates-body">
+                </tbody>
+        </table>
+    </div>
+
+    <div class="nav-buttons" style="margin-top: 20px;">
+        <button class="back-btn" onclick="Router.to('search-top')">再検索</button>
+    </div>
+</div>
