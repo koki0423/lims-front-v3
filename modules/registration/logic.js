@@ -34,9 +34,6 @@ function renderGenreOptions() {
         if (g.is_disabled) return; // 無効なものは表示しない
 
         const option = document.createElement('option');
-        // 保存するのは ID でも 名前 でも設計次第ですが、
-        // 今までのロジックが名前ベースなら g.name、IDベースなら g.id
-        // ここでは画面表示と整合性を取るため、nameをvalueにする例で書きます
         option.value = g.name;
         option.textContent = g.name;
 
@@ -370,12 +367,48 @@ window.RegController = {
     },
 };
 
+// -------------------------------------
+// 入力項目の表示切替 (個別 vs 一括)
+// -------------------------------------
+function updateInputVisibility() {
+    // 現在のモードが一括管理 ('bulk') かどうかチェック
+    const isBulk = (regState.type === 'bulk');
+    
+    // 操作する要素を取得
+    const serialGroup = document.getElementById('group-serial');
+    const quantityGroup = document.getElementById('group-quantity');
+    const serialInput = document.querySelector('input[name="serial"]');
+    const quantityInput = document.querySelector('input[name="quantity"]');
+
+    if (isBulk) {
+        // === 一括管理モードの場合 ===
+        // シリアル番号: 非表示 & 必須解除
+        if(serialGroup) serialGroup.style.display = 'none';
+        if(serialInput) serialInput.required = false;
+
+        // 数量: 表示 & 必須化
+        if(quantityGroup) quantityGroup.style.display = 'block';
+        if(quantityInput) quantityInput.required = true;
+
+    } else {
+        // === 個別管理モードの場合 ===
+        // シリアル番号: 表示 & 必須化
+        if(serialGroup) serialGroup.style.display = 'block';
+        if(serialInput) serialInput.required = true;
+
+        // 数量: 非表示 & 必須解除
+        if(quantityGroup) quantityGroup.style.display = 'none';
+        if(quantityInput) quantityInput.required = false;
+    }
+}
+
 // =====================================
 // Router から呼ばれる初期化フック
 // =====================================
 export function initRegistration(step) {
     if (step === 'step1') {
         renderGenreOptions();
+        updateInputVisibility();
         const form = document.getElementById('form-reg-1');
         if (form && regState.data) restoreFormData(form, regState.data);
     }
