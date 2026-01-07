@@ -1,6 +1,9 @@
 import axios from 'https://cdn.jsdelivr.net/npm/axios@1.7.2/+esm';
+import { getAdminToken, clearAdminToken } from './token.js';
+
 
 const API_BASE_URL = 'http://localhost:8443';
+
 
 // axiosインスタンス
 const client = axios.create({
@@ -12,12 +15,27 @@ const client = axios.create({
 });
 
 // レスポンス処理用インターセプター
+client.interceptors.request.use((config) => {
+  const token = getAdminToken();
+  if (token) {
+    if (!config.headers) config.headers = {};
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
+
 client.interceptors.response.use(
-    (res) => res.data,
-    (err) => {
-        console.error('API Error:', err);
-        return Promise.reject(err);
+  (res) => res.data,
+  (err) => {
+    const status = err?.response?.status;
+    if (status === 401) {
+      clearAdminToken();
+      // Router は window.Router を使う（router.jsで global 公開してる） :contentReference[oaicite:8]{index=8}
+      if (window.Router) window.Router.to('admin-login');
     }
+    console.error('API Error:', err);
+    return Promise.reject(err);
+  }
 );
 
 // === 2. エンドポイント定義 (機能ごとにオブジェクトでまとめる) ===
@@ -39,7 +57,7 @@ export const API = {
 
         // ラベル印刷
         printLabel: (payload) => client.post('/api/v2/assets/print', payload),
-        
+
         // バッチ印刷
         printBatch: (payload) => client.post('/api/v2/assets/print/batch', payload),
 
@@ -89,10 +107,11 @@ export const API = {
 
     // 管理者・認証（まだバックエンド実装してない）
     admin: {
-        login: (id, password) => client.post('/login', { id, password }),
-        registerUser: (data) => client.post('/users', data),
+        login: (payload) => client.post('/api/v2/login', payload),
+        register: (payload) => client.post('/api/v2/register', payload),
     },
-    
+
+
     genres: {
         list: (all = false) => client.get(`/api/v2/genres${all ? '?all=true' : ''}`),
         create: (payload) => client.post('/api/v2/genres', payload),

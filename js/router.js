@@ -5,6 +5,7 @@ import { initLendReturn } from '../modules/lend_return/logic.js';
 import { initSearch, initSearchList } from '../modules/search/logic.js';
 import { initComplete } from '../modules/common/logic.js';
 import '../modules/admin/logic.js';
+import { getAdminToken, clearAdminToken } from './token.js';
 
 // ルート定義: 画面IDとファイルパス、初期化処理の紐付け
 const routes = {
@@ -98,13 +99,14 @@ const routes = {
 
     // === 管理者機能 ===
     'admin-login': { path: 'modules/admin/login.html', title: '管理者ログイン' },
-    'admin-main': { path: 'modules/admin/main_menu.html', title: '管理者メニュー' },
-    'admin-register': { path: 'modules/admin/register.html', title: '管理者追加登録' },
+    'admin-main': { path: 'modules/admin/main_menu.html', title: '管理者メニュー', requiresAuth: true },
+    'admin-register': { path: 'modules/admin/register.html', title: '管理者追加登録', requiresAuth: true },
     'admin-genres': {
-        path: 'modules/admin/genre_list.html',
-        title: '備品ジャンル管理',
+        path: 'modules/admin/genre_list.html', title: '備品ジャンル管理',
+        requiresAuth: true,
         init: () => window.AdminController.initGenreMaster()
     },
+
 };
 
 export const Router = {
@@ -116,9 +118,17 @@ export const Router = {
             return;
         }
 
+        if (route.requiresAuth) {
+            const token = getAdminToken();
+            if (!token) {
+                routeKey = 'admin-login';
+            }
+        }
+
         try {
+
             // HTMLをフェッチ
-            const response = await fetch(route.path);
+            const response = await fetch(routes[routeKey].path);
             const html = await response.text();
 
             // コンテナに注入
@@ -135,7 +145,7 @@ export const Router = {
 
             // 特定の初期化処理があれば実行
             if (route.init) {
-                route.init();
+                await route.init();
             }
 
             // スクロールリセット
