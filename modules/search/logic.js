@@ -5,18 +5,22 @@ import { AppState } from '../../js/app_state.js';
 // === 定数定義 ===
 // ステータス定義 (ID -> 表示名)
 const STATUS_MAP = {
-    1: '正常',
-    2: '故障',
-    3: '修理中',
-    4: '貸出中',
-    5: '廃棄済み',
-    6: '紛失'
+    1: { name: '正常', class: 'badge-normal' },
+    2: { name: '故障', class: 'badge-error' },
+    3: { name: '修理中', class: 'badge-warn' },
+    4: { name: '貸出中', class: 'badge-warn' },
+    5: { name: '廃棄済み', class: 'badge-gray' },
+    6: { name: '紛失', class: 'badge-error' }
 };
 
 // === 状態管理オブジェクト ===
 const searchState = {
-    result: null, // 検索結果1件をここに保持
-    candidates: [],   // 一覧画面用の検索結果リスト
+    result: null,       // 検索結果1件をここに保持
+    candidates: [],     // 一覧画面用の検索結果リスト
+    displayList: [],    // 画面に表示している、フィルタ・ソート済みのデータ
+    currentFilter: null,// フィルタ状態 (null=全表示)
+    sortKey: null,      // 'mgmt', 'name', 'status', 'location' など
+    sortOrder: 'asc'    // 'asc'(昇順) か 'desc'(降順)
 };
 
 // === ヘルパー関数 ===
@@ -25,7 +29,8 @@ function genreById(id) {
 }
 
 function getStatusName(id) {
-    return STATUS_MAP[Number(id)] || '不明';
+    const status = STATUS_MAP[Number(id)];
+    return status ? status.name : '不明';
 }
 
 // APIレスポンス (master + asset) を画面表示用のフラットなオブジェクトに変換
@@ -61,6 +66,10 @@ function formatPairData(data) {
 // === コントローラー ===
 window.SearchController = {
     async performSearch() {
+        searchState.result = null;
+        searchState.candidates = [];
+        searchState.currentFilter = null;
+
         const idInput = document.querySelector('input[name="itemId"]'); // 備品番号
         const nameInput = document.getElementById('search-name');       // 備品名
 
@@ -93,14 +102,13 @@ window.SearchController = {
             }
 
             // === 分岐ロジック ===
-
             if (results.length === 1) {
-                // ★ 1件だけなら、直接詳細画面へ (UX向上)
+                // 1件だけなら、直接詳細画面へ (UX向上)
                 // formatPairDataを通して整形し、stateにセット
                 searchState.result = formatPairData(results[0]);
                 Router.to('search-result'); // 詳細画面へ
             } else {
-                // ★ 複数件なら、候補リストをstateに保存して一覧画面へ
+                // 複数件なら、候補リストをstateに保存して一覧画面へ
                 searchState.candidates = results;
                 Router.to('search-list');   // 一覧画面へ (router.jsへの登録が必要)
             }
@@ -110,27 +118,68 @@ window.SearchController = {
             alert('検索中にエラーが発生しました');
         }
     },
+    // フィルタ切り替え
+    toggleFilter(status) {
+        if (String(searchState.currentFilter) === String(status)) {
+            searchState.currentFilter = null;
+        } else {
+            searchState.currentFilter = status;
+        }
 
-    // ★追加: 一覧画面で「詳細」ボタンを押したときの処理
+        initSearchList();
+        this.updateFilterStyles();
+    },
+
+    // フィルタボタンの見た目更新
+    updateFilterStyles() {
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (String(btn.dataset.status) === String(searchState.currentFilter)) {
+                btn.classList.add('active');
+            }
+        });
+    },
+
+    // ソート切り替え
+    sortBy(key) {
+        // 同じ列をクリックしたら昇順・降順を反転
+        if (searchState.sortKey === key) {
+            searchState.sortOrder = searchState.sortOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            // 違う列ならその列で昇順リセット
+            searchState.sortKey = key;
+            searchState.sortOrder = 'asc';
+        }
+        initSearchList(); // 再描画
+    },
+
+    // 一覧画面で「詳細」ボタンを押したときの処理
     selectCandidate(index) {
-        // メモリ上の配列からデータを取り出す (API通信なし！)
-        const rawData = searchState.candidates[index];
+        const rawData = searchState.displayList[index];
 
         if (!rawData) {
             alert('データの取得に失敗しました');
             return;
         }
 
-        // 整形して詳細表示用stateにセット
+        // フォーマットして詳細画面用Stateにセット
         searchState.result = formatPairData(rawData);
-
-        // 詳細画面へ遷移
         Router.to('search-result');
     },
 
+    // 戻るボタンの挙動
     backToSearch() {
+        // 詳細表示中のデータをクリア
         searchState.result = null;
-        Router.to('search-top');
+
+        // 候補リスト(candidates)を持っているかチェック
+        if (searchState.candidates && searchState.candidates.length > 0) {
+            // 一覧経由できた場合 -> 一覧画面に戻る
+            Router.to('search-list');
+        } else {
+            // 直接1件ヒットした場合 -> 検索トップに戻る
+            Router.to('search-top');
+        }
     }
 };
 
@@ -175,20 +224,160 @@ export function initSearch(view) {
 }
 
 // === 画面初期化 (list.html 表示時) ===
+// export function initSearchList() {
+//     const tbody = document.getElementById('search-candidates-body');
+//     if (!tbody) return;
+
+//     // ボタンのスタイル初期化
+//     if (window.SearchController.updateFilterStyles) {
+//         window.SearchController.updateFilterStyles();
+//     }
+
+//     if (!searchState.candidates || searchState.candidates.length === 0) {
+//         tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
+//         return;
+//     }
+
+//     // フィルタリング処理
+//     let filteredCandidates = searchState.candidates.filter(item => {
+//         if (!searchState.currentFilter) return true;
+//         const s = item.asset ? item.asset.status_id : 1;
+//         return String(s) === String(searchState.currentFilter);
+//     });
+
+//     // ソート処理
+//     if (searchState.sortKey) {
+//         list.sort((a, b) => {
+//             const getVal = (obj, key) => {
+//                 const m = obj.master || {};
+//                 const as = obj.asset || {};
+
+//                 switch (key) {
+//                     case 'mgmt': return m.management_number || as.management_number || '';
+//                     case 'name': return m.name || '';
+//                     // case 'qty': return Number(as.quantity || 0); // 今回の表示に数量はないので不要かも
+//                     case 'status': return Number(as.status_id || 0);
+//                     case 'location': return as.location || as.default_location || as.owner || '';
+//                     default: return '';
+//                 }
+//             };
+
+//             const valA = getVal(a, searchState.sortKey);
+//             const valB = getVal(b, searchState.sortKey);
+
+//             if (valA < valB) return searchState.sortOrder === 'asc' ? -1 : 1;
+//             if (valA > valB) return searchState.sortOrder === 'asc' ? 1 : -1;
+//             return 0;
+//         });
+//     }
+//     searchState.displayList = list;
+
+//     // ゼロチェック
+//     if (filteredCandidates.length === 0) {
+//         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">該当する条件の備品はありません</td></tr>';
+//         return;
+//     }
+
+//     // map処理
+//     tbody.innerHTML = list.map((item, index) => {
+//         const m = item.master || {};
+//         const a = item.asset || {};
+//         const statusName = getStatusName(a.status_id);
+//         const mgmtNum = m.management_number || a.management_number || '-';
+//         const location = a.location || a.default_location || a.owner || '-';
+
+//         return `
+//             <tr>
+//                 <td style="padding: 12px 5px;">${mgmtNum}</td>
+//                 <td style="padding: 12px 5px;">${m.name || '-'}</td>
+//                 <td style="padding: 12px 5px;">
+//                     <span class="status-badge status-${a.status_id}">${statusName}</span>
+//                 </td>
+//                 <td style="padding: 12px 5px;">${location}</td>
+//                 <td style="text-align: center; padding: 12px 5px;">
+//                     <button class="sm-btn" onclick="SearchController.selectCandidate(${index})">
+//                         詳細
+//                     </button>
+//                 </td>
+//             </tr>
+//         `;
+//     }).join('');
+
+//     if (window.SearchController.updateSortHeaderStyles) { 
+//         // logic.js内に定義が必要ですが、SearchControllerのメソッドにするか、外に書くかで呼び出し方が変わります
+//          // もしSearchController内に入れてないなら、HTML側のonclickと同様の呼び出しが必要
+//          // 簡易的には:
+//          document.querySelectorAll('.sort-header').forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
+//          const activeTh = document.querySelector(`.sort-header[data-key="${searchState.sortKey}"]`);
+//          if (activeTh) activeTh.classList.add('sort-' + searchState.sortOrder);
+//     }
+// }
+
+// === 画面初期化 (list.html 表示時) ===
 export function initSearchList() {
     const tbody = document.getElementById('search-candidates-body');
     if (!tbody) return;
+
+    // ボタンのスタイル初期化
+    if (window.SearchController.updateFilterStyles) {
+        window.SearchController.updateFilterStyles();
+    }
 
     if (!searchState.candidates || searchState.candidates.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
         return;
     }
 
-    tbody.innerHTML = searchState.candidates.map((item, index) => {
-        // データ整形 (リスト表示用に簡易的なもの)
+    // 1. フィルタリング処理
+    // ★修正: ここで const ではなく let list にして、結果を受ける
+    let list = searchState.candidates.filter(item => {
+        if (!searchState.currentFilter) return true;
+        const s = item.asset ? item.asset.status_id : 1;
+        return String(s) === String(searchState.currentFilter);
+    });
+
+    // 2. ソート処理
+    if (searchState.sortKey) {
+        // ★修正: ここで filteredCandidates ではなく list をソートする
+        list.sort((a, b) => {
+            const getVal = (obj, key) => {
+                const m = obj.master || {};
+                const as = obj.asset || {};
+
+                switch (key) {
+                    case 'mgmt': return m.management_number || as.management_number || '';
+                    case 'name': return m.name || '';
+                    // case 'qty': return Number(as.quantity || 0); // 今回の表示に数量はないので不要かも
+                    case 'status': return Number(as.status_id || 0);
+                    case 'location': return as.location || as.default_location || as.owner || '';
+                    default: return '';
+                }
+            };
+
+            const valA = getVal(a, searchState.sortKey);
+            const valB = getVal(b, searchState.sortKey);
+
+            if (valA < valB) return searchState.sortOrder === 'asc' ? -1 : 1;
+            if (valA > valB) return searchState.sortOrder === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+
+    // 3. 表示用リストをStateに保存 (重要)
+    searchState.displayList = list;
+
+    // ゼロチェック (list を見る)
+    if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">該当する条件の備品はありません</td></tr>';
+        return;
+    }
+
+    // 4. map処理 (★修正: list を map する)
+    tbody.innerHTML = list.map((item, index) => {
         const m = item.master || {};
         const a = item.asset || {};
-        const statusName = getStatusName(a.status_id);
+        const statusInfo = STATUS_MAP[Number(a.status_id)] || { name: '不明', class: 'badge-gray' };
+
         const mgmtNum = m.management_number || a.management_number || '-';
         const location = a.location || a.default_location || a.owner || '-';
 
@@ -197,7 +386,7 @@ export function initSearchList() {
                 <td style="padding: 12px 5px;">${mgmtNum}</td>
                 <td style="padding: 12px 5px;">${m.name || '-'}</td>
                 <td style="padding: 12px 5px;">
-                    <span class="status-badge status-${a.status_id}">${statusName}</span>
+                    <span class="status-badge ${statusInfo.class}">${statusInfo.name}</span>
                 </td>
                 <td style="padding: 12px 5px;">${location}</td>
                 <td style="text-align: center; padding: 12px 5px;">
@@ -208,4 +397,18 @@ export function initSearchList() {
             </tr>
         `;
     }).join('');
+
+    updateSortArrows();
+}
+
+function updateSortArrows() {
+    // 1. いったん全部のヘッダーからクラスを消す
+    document.querySelectorAll('.sort-header').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+
+        // 2. 現在ソート中のキーと一致するヘッダーだけにクラスをつける
+        if (th.dataset.key === searchState.sortKey) {
+            th.classList.add('sort-' + searchState.sortOrder);
+        }
+    });
 }
