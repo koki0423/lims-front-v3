@@ -65,7 +65,7 @@ window.ItemListController = {
             notesInput.value = asset.notes || '';
 
             // === 4. ロック状態の初期化 (リセット) ===
-            // 一旦すべて有効化してから、条件に応じて無効化していくスタイルがバグりにくいです
+            // 一旦すべて有効化してから、条件に応じて無効化する
             statusSelect.disabled = false;
             locInput.disabled = false;
             notesInput.disabled = false;
@@ -85,28 +85,24 @@ window.ItemListController = {
 
             // === 5. ステータス別の特殊ロック処理 ===
 
-            // ★ケースA: 貸出中 (ID: 4)
-            // -> ステータス変更不可 (返却処理を通すべきだから)
+            // ケースA: 貸出中 (ID: 4)
+            // -> ステータス変更不可
             if (asset.status_id === 4) {
                 statusSelect.disabled = true;
                 // 念のため背景色も変えておくと親切かも
                 // statusSelect.style.backgroundColor = "#f5f5f5";
             }
 
-            // ★ケースB: 廃棄済み (ID: 5)
+            // ケースB: 廃棄済み (ID: 5)
             // -> 備考以外は一切変更不可
             if (asset.status_id === 5) {
-                // 強制フルロック
                 statusSelect.disabled = true;
-                qtyInput.disabled = true;      // バルク品であっても変更不可
-                locInput.disabled = true;      // 場所変更も不可
+                qtyInput.disabled = true;
+                locInput.disabled = true;
 
-                // 視覚的フィードバック
                 qtyInput.style.backgroundColor = "#f5f5f5";
                 locInput.style.backgroundColor = "#f5f5f5";
                 // statusSelect.style.backgroundColor = "#f5f5f5";
-
-                // ※ notesInput (備考) だけは disabled = false のまま残る
             }
 
             // モーダル表示
@@ -131,7 +127,6 @@ window.ItemListController = {
         const locVal = document.getElementById('edit-location').value;
         const notesVal = document.getElementById('edit-notes').value;
 
-        // ★ ここで status_id を決定する
         let statusId;
 
         // select が有効で、かつ値が入っているときはそれを採用（正常/故障/修理中/紛失）
@@ -152,8 +147,6 @@ window.ItemListController = {
         if (!qtyInput.disabled) {
             payload.quantity = Number(qtyInput.value);
         }
-
-        console.log('Update Payload:', payload); // デバッグ用
 
         try {
             // PUT /assets/:asset_id
@@ -203,8 +196,6 @@ export async function initItemList() {
         // 戻り値例: { items: [...], next_offset: 0, total: 1 }
         const response = await API.assets.fetchList();
 
-        console.log("API Response:", response); // デバッグ用
-
         itemListState.items = response.items || [];
 
         renderList();
@@ -223,7 +214,7 @@ function renderList() {
     const paginationDiv = document.getElementById('pagination-controls');
     if (!tbody) return;
 
-    // 1. まずフィルタリング（全件から絞り込み）
+    // 1. フィルタリング
     const filteredItems = itemListState.items.filter(item => {
         if (itemListState.currentFilter === null || itemListState.currentFilter === '') {
             return true;
@@ -236,7 +227,7 @@ function renderList() {
     const totalItems = filteredItems.length;
     const totalPages = Math.ceil(totalItems / itemListState.itemsPerPage) || 1;
 
-    // 現在ページが総ページを超えていたら補正 (例: 5ページ目にいてフィルタしたら2ページ分しかなくなった場合)
+    // 現在ページが総ページを超えていたら補正
     if (itemListState.currentPage > totalPages) {
         itemListState.currentPage = totalPages;
     }
@@ -250,7 +241,7 @@ function renderList() {
     // 4. データ描画
     if (displayItems.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">該当する備品はありません</td></tr>';
-        paginationDiv.innerHTML = ''; // ボタンも消す
+        paginationDiv.innerHTML = '';
         return;
     }
 
