@@ -2,7 +2,11 @@ import axios from 'https://cdn.jsdelivr.net/npm/axios@1.7.2/+esm';
 import { getAdminToken, clearAdminToken } from './token.js';
 
 
-const API_BASE_URL = 'http://localhost:8443';
+//開発環境用APIベースURL
+// const API_BASE_URL = 'http://localhost:8443';
+
+// 本番環境用APIベースURL
+const API_BASE_URL = '';
 
 
 // axiosインスタンス
