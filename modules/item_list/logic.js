@@ -277,10 +277,10 @@ function renderPaginationControls(container, totalPages, currentPage) {
     const prevDisabled = currentPage === 1 ? 'disabled' : '';
     html += `<button class="page-btn" ${prevDisabled} onclick="ItemListController.changePage(${currentPage - 1})">＜</button>`;
 
-    // ページ番号ボタン (簡易版: 全部出すと多いので、最初・最後・現在周辺だけ出すのが一般的ですが、まずはシンプルに全部出します)
+    // ページ番号ボタン
     // ページ数が多すぎる場合の省略ロジックを入れるならここを調整
     for (let i = 1; i <= totalPages; i++) {
-        // ページ数が多い場合、カレント周辺のみ表示するロジック (例)
+        // ページ数が多い場合、カレント周辺のみ表示するロジック
         if (totalPages > 10 && Math.abs(currentPage - i) > 2 && i !== 1 && i !== totalPages) {
             if (html.slice(-3) !== '...') html += '<span style="padding:0 5px;">...</span>';
             continue;
