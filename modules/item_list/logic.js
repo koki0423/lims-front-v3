@@ -48,15 +48,18 @@ window.ItemListController = {
             document.getElementById('edit-code').value = asset.management_number;
             document.getElementById('disp-current-location').value = asset.location || '-';
 
+
             // === 2. 要素の取得 ===
             const qtyInput = document.getElementById('edit-qty');
             const qtyMsg = document.getElementById('qty-lock-msg');
             const statusSelect = document.getElementById('edit-status');
             const locInput = document.getElementById('edit-location');
             const notesInput = document.getElementById('edit-notes');
+            const statusOriginalInput = document.getElementById('edit-status-original');
 
             // === 3. 値のセット ===
             qtyInput.value = asset.quantity;
+            statusOriginalInput.value = String(asset.status_id);
             statusSelect.value = asset.status_id;
             locInput.value = asset.default_location || '';
             notesInput.value = asset.notes || '';
@@ -122,12 +125,25 @@ window.ItemListController = {
     async update() {
         const id = document.getElementById('edit-asset-id').value;
 
-        const statusVal = document.getElementById('edit-status').value;
+        const statusSelect = document.getElementById('edit-status');
+        const statusOriginalVal = document.getElementById('edit-status-original').value;
+
         const locVal = document.getElementById('edit-location').value;
         const notesVal = document.getElementById('edit-notes').value;
 
+        // ★ ここで status_id を決定する
+        let statusId;
+
+        // select が有効で、かつ値が入っているときはそれを採用（正常/故障/修理中/紛失）
+        if (!statusSelect.disabled && statusSelect.value !== '') {
+            statusId = Number(statusSelect.value);
+        } else {
+            // 貸出中(4) / 廃棄済み(5) など、option が無い or disabled で value="" のケース
+            statusId = Number(statusOriginalVal);
+        }
+
         const payload = {
-            status_id: Number(statusVal),
+            status_id: statusId,
             default_location: locVal,
             notes: notesVal,
         };
@@ -142,7 +158,6 @@ window.ItemListController = {
         try {
             // PUT /assets/:asset_id
             await API.assets.update(id, payload);
-
             alert('更新しました');
             this.closeModal();
 
@@ -151,12 +166,12 @@ window.ItemListController = {
             } else {
                 window.location.reload();
             }
-
         } catch (error) {
             console.error(error);
             alert('更新に失敗しました: ' + (error.response?.data?.error || error.message));
         }
-    },
+    }
+    ,
 
     // 表示件数変更
     changePerPage(val) {
