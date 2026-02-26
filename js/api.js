@@ -3,10 +3,10 @@ import { getAdminToken, clearAdminToken } from './token.js';
 
 
 //開発環境用APIベースURL
-// const API_BASE_URL = 'http://localhost:8443';
+const API_BASE_URL = 'http://localhost:8443';
 
 // 本番環境用APIベースURL
-const API_BASE_URL = '';
+// const API_BASE_URL = '';
 
 
 // axiosインスタンス
@@ -88,6 +88,9 @@ export const API = {
 
         // 名前で検索 (クエリパラメータで渡す)
         searchByName: (name) => client.get(`/api/v2/assets/search?name=${encodeURIComponent(name)}`),
+
+        // JANコード検索
+        lookupJAN: (janCode) => client.get(`/api/v2/assets/lookup/${janCode}`),
     },
 
     // ラベル印刷（assetsのやつとなんで分けたのかわからん忘れた）

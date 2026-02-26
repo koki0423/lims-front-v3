@@ -352,9 +352,6 @@ window.RegController = {
             console.log('Batch print response:', response);
             alert('印刷リクエストを送信しました');
 
-            // ★変更: ここでの Router.to('main-menu') は削除しました。
-            // 呼び出し元の uploadCsv が最後に 'complete' に飛ばしてくれるからです。
-
             // データクリア
             sessionStorage.removeItem('last_import_print_config');
             sessionStorage.removeItem('last_import_results');
@@ -365,6 +362,68 @@ window.RegController = {
             alert('印刷に失敗しました: ' + (error.response?.data?.error || error.message) + '\n' + '一覧画面から手動で印刷してください。');
         }
     },
+
+    /* ここからJANコード系 */
+    // 手動入力エリアの開閉トグル
+    toggleManualInput(forceOpen = false) {
+        const manualArea = document.getElementById('manual-input-area');
+        const toggleBtn = document.getElementById('toggle-manual-btn');
+
+        if (!manualArea) return;
+
+        // forceOpenがtrue、または現在非表示なら開く
+        if (forceOpen || manualArea.style.display === 'none') {
+            manualArea.style.display = 'block';
+            manualArea.classList.add('fade-in'); // cssのフェードイン効果
+            if (toggleBtn) toggleBtn.textContent = '手動入力を閉じる ▲';
+        } else {
+            manualArea.style.display = 'none';
+            if (toggleBtn) toggleBtn.textContent = 'バーコードがない場合はこちら（手動入力） ▼';
+        }
+    },
+
+    // JANコード検索と自動補完
+    async lookupJAN() {
+        const janInput = document.getElementById('jan-input');
+        const nameInput = document.querySelector('input[name="itemName"]');
+        const makerInput = document.querySelector('input[name="maker"]');
+        const modelInput = document.querySelector('input[name="model"]');
+
+        if (!janInput) return;
+        const janCode = janInput.value.trim();
+
+        if (!janCode) {
+            alert('JANコードを入力してください');
+            return;
+        }
+
+        const btn = document.getElementById('jan-search-btn');
+        if (btn) { btn.disabled = true; btn.textContent = '検索中...'; }
+
+        try {
+            const result = await API.assets.lookupJAN(janCode);
+
+            // 取得した値をセット
+            if (result.name) nameInput.value = result.name;
+            if (result.manufacturer) makerInput.value = result.manufacturer;
+
+            // ★検索成功したら、隠れていたフォームを自動で開く
+            this.toggleManualInput(true);
+
+            if (modelInput) modelInput.focus();
+
+        } catch (error) {
+            console.error('JAN Lookup Error:', error);
+            const msg = error.response?.data?.error || error.response?.data?.message || '商品情報が見つかりませんでした。';
+            alert(`検索エラー: ${msg}`);
+
+            // ★見つからなかった場合も手入力してもらうために開く
+            this.toggleManualInput(true);
+            if (nameInput) nameInput.focus();
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = '検索'; }
+        }
+    },
 };
 
 // -------------------------------------
@@ -373,7 +432,7 @@ window.RegController = {
 function updateInputVisibility() {
     // 現在のモードが一括管理 ('bulk') かどうかチェック
     const isBulk = (regState.type === 'bulk');
-    
+
     // 操作する要素を取得
     const serialGroup = document.getElementById('group-serial');
     const quantityGroup = document.getElementById('group-quantity');
@@ -383,22 +442,22 @@ function updateInputVisibility() {
     if (isBulk) {
         // === 一括管理モードの場合 ===
         // シリアル番号: 非表示 & 必須解除
-        if(serialGroup) serialGroup.style.display = 'none';
-        if(serialInput) serialInput.required = false;
+        if (serialGroup) serialGroup.style.display = 'none';
+        if (serialInput) serialInput.required = false;
 
         // 数量: 表示 & 必須化
-        if(quantityGroup) quantityGroup.style.display = 'block';
-        if(quantityInput) quantityInput.required = true;
+        if (quantityGroup) quantityGroup.style.display = 'block';
+        if (quantityInput) quantityInput.required = true;
 
     } else {
         // === 個別管理モードの場合 ===
         // シリアル番号: 表示 & 必須化
-        if(serialGroup) serialGroup.style.display = 'block';
-        if(serialInput) serialInput.required = true;
+        if (serialGroup) serialGroup.style.display = 'block';
+        if (serialInput) serialInput.required = true;
 
         // 数量: 非表示 & 必須解除
-        if(quantityGroup) quantityGroup.style.display = 'none';
-        if(quantityInput) quantityInput.required = false;
+        if (quantityGroup) quantityGroup.style.display = 'none';
+        if (quantityInput) quantityInput.required = false;
     }
 }
 
@@ -411,6 +470,14 @@ export function initRegistration(step) {
         updateInputVisibility();
         const form = document.getElementById('form-reg-1');
         if (form && regState.data) restoreFormData(form, regState.data);
+
+        // 画面表示後にJANコード入力欄へ自動フォーカス
+        setTimeout(() => {
+            const janInput = document.getElementById('jan-input');
+            if (janInput) {
+                janInput.focus();
+            }
+        }, 100);
     }
     if (step === 'step2') {
         const form = document.getElementById('form-reg-1');
