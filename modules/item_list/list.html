@@ -81,7 +81,8 @@
                         <option value="1">正常</option>
                         <option value="2">故障</option>
                         <option value="3">修理中</option>
-                        <!-- <option value="4">貸出中</option> --><!-- 貸出中と廃棄済みは一貫性を取るためにモーダルから選択できないようにする -->
+                        <!-- 貸出中と廃棄済みは一貫性のためにモーダルから選択できないようにする -->
+                        <!-- <option value="4">貸出中</option> -->
                         <!-- <option value="5">廃棄済み</option> -->
                         <option value="6">紛失</option>
                     </select>
@@ -102,4 +103,55 @@
             </div>
         </form>
     </div>
+</div>
+
+<div id="label-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-window">
+    <h3>ラベル印刷</h3>
+
+    <form id="form-label-print" onsubmit="event.preventDefault(); ItemListController.submitLabelPrint();">
+      <input type="hidden" id="label-mgmt-number">
+
+      <div class="info-block">
+        <h4>印刷対象</h4>
+        <div class="form-group">
+          <label>管理番号</label>
+          <input type="text" id="label-target-display" readonly class="readonly-input">
+        </div>
+      </div>
+
+      <div class="info-block">
+        <h4>ラベル設定</h4>
+
+        <div class="form-group">
+          <label>コード種別</label>
+          <select id="label-code-type">
+            <option value="QR" selected>QRコード</option>
+            <option value="CODE128">バーコード(Code128)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>テープ幅</label>
+          <select id="label-tape-width">
+            <option value="9" selected>9 mm</option>
+            <option value="12">12 mm</option>
+            <option value="18">18 mm</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="label-halfcut" checked disabled>
+            ハーフカットを有効にする
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-buttons">
+        <button type="button" class="back-btn" onclick="ItemListController.closeLabelModal()">閉じる</button>
+        <button type="submit" class="primary-btn" id="label-print-btn">印刷</button>
+      </div>
+    </form>
+  </div>
 </div>

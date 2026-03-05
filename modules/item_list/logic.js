@@ -8,7 +8,13 @@ const itemListState = {
 
     // ページネーション用
     currentPage: 1,
-    itemsPerPage: 20
+    itemsPerPage: 20,
+
+    label: {
+        codeType: 'QR',
+        tapeWidth: 9,
+        halfcut: true
+    },
 };
 
 // ステータス定義（JSONのstatus_idに対応）
@@ -163,9 +169,79 @@ window.ItemListController = {
             console.error(error);
             alert('更新に失敗しました: ' + (error.response?.data?.error || error.message));
         }
-    }
-    ,
+    },
+    openLabelModal(managementNumber) {
+        const modal = document.getElementById('label-modal');
+        if (!modal) return;
 
+        const mgmtHidden = document.getElementById('label-mgmt-number');
+        const mgmtDisp = document.getElementById('label-target-display');
+        const codeSel = document.getElementById('label-code-type');
+        const widthSel = document.getElementById('label-tape-width');
+
+        if (mgmtHidden) mgmtHidden.value = String(managementNumber);
+        if (mgmtDisp) mgmtDisp.value = String(managementNumber);
+
+        // 前回選択を復元
+        if (codeSel) codeSel.value = itemListState.label.codeType || 'QR';
+        if (widthSel) widthSel.value = String(itemListState.label.tapeWidth || 9);
+
+        modal.style.display = 'flex';
+    },
+
+    closeLabelModal() {
+        const modal = document.getElementById('label-modal');
+        if (modal) modal.style.display = 'none';
+    },
+
+    async submitLabelPrint() {
+        const mgmtHidden = document.getElementById('label-mgmt-number');
+        const codeSel = document.getElementById('label-code-type');
+        const widthSel = document.getElementById('label-tape-width');
+        const btn = document.getElementById('label-print-btn');
+
+        const managementNumber = mgmtHidden ? mgmtHidden.value : '';
+        if (!managementNumber) {
+            alert('管理番号が取得できません');
+            return;
+        }
+
+        // 設定をstateに保存
+        const rawCode = codeSel ? codeSel.value : 'QR';
+        const codeType = rawCode === 'CODE128' ? 'CODE128' : 'QR';
+
+        let tapeWidth = 9;
+        if (widthSel) {
+            const n = parseInt(widthSel.value, 10);
+            tapeWidth = isNaN(n) ? 9 : n;
+        }
+
+        itemListState.label.codeType = codeType;
+        itemListState.label.tapeWidth = tapeWidth;
+        itemListState.label.halfcut = true;
+
+        if (btn) { btn.disabled = true; btn.textContent = '印刷中...'; }
+        
+        //　予備
+        await ensureGenresLoaded();
+
+        try {
+            // マスタ情報を取得（編集と同じAPI）
+            const data = await API.assets.getPair(managementNumber);
+            const master = data.master;
+
+            const payload = buildListPrintPayload(master, managementNumber, itemListState.label);
+            await API.assets.printLabel(payload);
+
+            alert('ラベル印刷を実行しました');
+            this.closeLabelModal();
+        } catch (e) {
+            console.error('印刷エラー:', e);
+            alert('印刷に失敗しました: ' + (e.response?.data?.error || e.message));
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = '印刷'; }
+        }
+    },
     // 表示件数変更
     changePerPage(val) {
         itemListState.itemsPerPage = Number(val);
@@ -180,6 +256,48 @@ window.ItemListController = {
     },
 };
 
+function buildListPrintPayload(masterPayload, managementNumber, labelSetting) {
+    const type = labelSetting.codeType === 'QR' ? 'qrcode' : 'code128';
+
+    const gid = Number(masterPayload.genre_id);
+    const genreObj = AppState.genres.find(g => g.id === gid);
+    const g = genreById(masterPayload.genre_id);
+    const genreName = g ? (g.name ?? g.genre_name ?? '-') : '-';
+
+    return {
+        config: {
+            use_halfcut: true,
+            confirm_tape_width: false,
+            enable_print_log: true,
+        },
+        label: {
+            checked: true,
+            col_b: masterPayload.name,
+            col_c: genreName,
+            col_d: managementNumber,
+            col_e: managementNumber,
+        },
+        width: labelSetting.tapeWidth,
+        type,
+    };
+}
+
+async function ensureGenresLoaded() {
+    if (AppState.genres && AppState.genres.length > 0) {
+        return;
+    }
+
+    const res = await API.genres.list(true);
+    const rows = res && res.data ? res.data : [];
+
+    AppState.genres = rows;
+}
+
+function genreById(id) {
+    const target = Number(id);
+    return AppState.genres.find(g => Number(g.id ?? g.genre_id) === target) || null;
+}
+
 // === 初期化処理 ===
 export async function initItemList() {
     itemListState.currentFilter = '';
@@ -193,11 +311,12 @@ export async function initItemList() {
 
     try {
         // APIからデータ取得
+        // 事前にジャンルデータを確実にロードしておく（ラベル印刷のときに必要）
+        await ensureGenresLoaded();
+
         // 戻り値例: { items: [...], next_offset: 0, total: 1 }
         const response = await API.assets.fetchList();
-
         itemListState.items = response.items || [];
-
         renderList();
 
     } catch (error) {
@@ -264,6 +383,7 @@ function renderList() {
                 </td>
                 <td style="text-align:center; padding: 12px 5px;">
                     <button class="sm-btn" onclick="ItemListController.edit('${mgmtNum}')">編集</button>
+                    <button class="sm-btn" onclick="ItemListController.openLabelModal('${mgmtNum}')">ラベル印刷</button>
                     </td>
             </tr>
         `;
