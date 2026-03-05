@@ -112,12 +112,11 @@ export const API = {
         fetchHistory: () => client.get('/api/v2/disposals'),
     },
 
-    // 管理者・認証（まだバックエンド実装してない）
+    // 管理者・認証
     admin: {
         login: (payload) => client.post('/api/v2/login', payload),
         register: (payload) => client.post('/api/v2/register', payload),
     },
-
 
     genres: {
         list: (all = false) => client.get(`/api/v2/genres${all ? '?all=true' : ''}`),
