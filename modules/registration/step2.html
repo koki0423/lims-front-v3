@@ -7,8 +7,9 @@
             <label style="display: block; text-align: left;margin-top: 5px; color: #333;">
                 YahooAPIを使用しているため、JANコードが存在しない場合もあります</label>
             <div class="input-with-btn" style="margin-top: 10px;">
-                <input type="text" id="jan-input" placeholder="スキャンするかJANコードを入力してください。ISBNコードも対応しています"
-                    onkeypress="if(event.key === 'Enter') { event.preventDefault(); RegController.lookupJAN(); }">
+                <input type="text" id="jan-input" inputmode="numeric" autocomplete="off" autocapitalize="off"
+                    spellcheck="false" pattern="[0-9]*" placeholder="スキャンするかJANコードを入力してください。ISBNコードも対応しています"
+                    onkeypress="if(event.key === 'Enter') { event.preventDefault(); RegController.lookupJAN(); }" />
                 <button type="button" class="primary-btn" id="jan-search-btn"
                     onclick="RegController.lookupJAN()">検索</button>
             </div>

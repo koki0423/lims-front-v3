@@ -391,9 +391,13 @@ window.RegController = {
 
         if (!janInput) return;
         const janCode = janInput.value.trim();
-
         if (!janCode) {
             alert('JANコードを入力してください');
+            return;
+        }
+        if (!/^\d+$/.test(janCode)) {
+            alert('JAN/ISBNは数字のみ入力してください');
+            janInput.focus();
             return;
         }
 
@@ -474,9 +478,46 @@ export function initRegistration(step) {
         // 画面表示後にJANコード入力欄へ自動フォーカス
         setTimeout(() => {
             const janInput = document.getElementById('jan-input');
-            if (janInput) {
-                janInput.focus();
+            if (!janInput) return;
+
+            // 一度だけバリデーションを仕込む（画面行き来で多重登録しない）
+            if (!janInput.dataset.janValidated) {
+                janInput.dataset.janValidated = '1';
+
+                const sanitizeDigits = () => {
+                    // 1) 全角数字→半角数字に寄せる（よくある事故対策）
+                    let v = janInput.value;
+                    v = v.replace(/[０-９]/g, function (ch) {
+                        return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+                    });
+
+                    // 2) 数字以外を除去
+                    const cleaned = v.replace(/[^0-9]/g, '');
+                    const hadInvalid = (cleaned !== v);
+
+                    janInput.value = cleaned;
+
+                    // 3) エラー表示（HTML標準のバリデーション機構を利用）
+                    if (hadInvalid) {
+                        janInput.setCustomValidity('JAN/ISBNは数字のみ入力できます（半角推奨）');
+                    } else {
+                        janInput.setCustomValidity('');
+                    }
+                };
+
+                // 入力のたびにサニタイズ
+                janInput.addEventListener('input', sanitizeDigits);
+
+                // フォーカス外れたら、エラーがあれば吹き出し表示（標準UI）
+                janInput.addEventListener('blur', function () {
+                    sanitizeDigits();
+                    if (!janInput.checkValidity()) {
+                        janInput.reportValidity();
+                    }
+                });
             }
+
+            janInput.focus();
         }, 100);
     }
     if (step === 'step2') {
