@@ -1,6 +1,6 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
-import { scanStudentIdWithRetry } from "../../js/nfcReader.js";
+import { scanStudentIdWithRetry } from "/js/nfcReader.js";
 
 // 廃棄機能の状態管理
 const disposalState = {
@@ -33,20 +33,39 @@ window.DisposalController = {
         console.log('Input Data:', disposalState.data);
     },
 
-    async NfcRead() {
-        const input = document.querySelector('input[name="registrant"]');
+    async NfcRead(targetName) {
+        const input = document.querySelector('input[name="' + targetName + '"]');
+
+        if (!input) {
+            console.error("target input not found:", targetName);
+            return;
+        }
+
         try {
             const result = await scanStudentIdWithRetry(9, 2000);
+
             if (result.ok) {
                 console.log("OK:", result.studentId);
                 input.value = result.studentId;
-            } else {
-                console.log("NG:", result.error);
-                input.value = "error";
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+                input.dispatchEvent(new Event("change", { bubbles: true }));
+                return;
             }
+
+            if (result.cancelled) {
+                console.log("NFC cancelled");
+                return;
+            }
+
+            console.log("NG:", result.error);
+            input.value = "error";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
         } catch (err) {
             console.error("scan error:", err);
             input.value = "error";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
         }
     },
 
@@ -182,7 +201,7 @@ export async function initDisposalHistory() {
     try {
         const response = await API.disposal.fetchHistory();
         const data = Array.isArray(response) ? response : (response.items || []);
-        
+
         historyState.items = data;
         historyState.currentPage = 1; // 初期化時は1ページ目に戻す
 
@@ -203,7 +222,7 @@ function renderTable() {
     // データがない場合
     if (historyState.items.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">廃棄履歴はありません</td></tr>';
-        if(paginationDiv) paginationDiv.innerHTML = '';
+        if (paginationDiv) paginationDiv.innerHTML = '';
         return;
     }
 
@@ -216,7 +235,7 @@ function renderTable() {
 
     const startIndex = (historyState.currentPage - 1) * historyState.itemsPerPage;
     const endIndex = startIndex + historyState.itemsPerPage;
-    
+
     // 表示データ切り出し
     const displayItems = historyState.items.slice(startIndex, endIndex);
 
@@ -251,7 +270,7 @@ function renderTable() {
 
         // [番号]
         for (let i = 1; i <= totalPages; i++) {
-             // ページ数が多い場合の省略ロジックが必要ならここに追加（今回は全件出し）
+            // ページ数が多い場合の省略ロジックが必要ならここに追加（今回は全件出し）
             const activeClass = i === current ? 'active' : '';
             html += `<button class="page-btn ${activeClass}" onclick="DisposalController.changePage(${i})">${i}</button>`;
         }
