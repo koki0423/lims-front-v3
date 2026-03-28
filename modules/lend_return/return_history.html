@@ -1,5 +1,18 @@
 <div class="screen-content">
     <h2>返却履歴</h2>
+    <div class="pagination-container">
+        <div class="rows-per-page">
+            <label>表示件数:</label>
+            <select onchange="LendReturnController.changeReturnHistoryPerPage(this.value)">
+                <option value="10">10件</option>
+                <option value="20" selected>20件</option>
+                <option value="50">50件</option>
+                <option value="100">100件</option>
+            </select>
+        </div>
+
+        <div id="return-history-pagination" class="pagination-controls"></div>
+    </div>
     <table class="data-table" style="border: none;">
         <thead>
             <tr style="border-bottom: 2px solid #ccc;">
