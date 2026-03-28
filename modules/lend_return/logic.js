@@ -1,203 +1,402 @@
-import { Router } from '../../js/router.js';
+import { Router } from '/js/router.js';
+import { API } from '/js/api.js';
+import { scanStudentIdWithRetry } from "/js/nfcReader.js";
 
-// === 状態管理 ===
 const lendState = {
     data: {}
 };
 
 const returnState = {
-    targetLending: null, // 検索でヒットした貸出情報
-    inputData: {}        // 返却時に入力した情報
+    targetLending: null,
+    inputData: {}
 };
 
-// === モックデータ: 現在貸出中のリスト ===
-// 返却機能のテスト用データ
-const mockActiveLendings = [
-    {
-        lendingId: '01K5BX9WF8TMF40YKJWF09HPZC',
-        itemId: 'OFS-20251101-0001',
-        itemName: 'MacBook Air M2',
-        borrower: 'AB12345',
-        lender: 'STAFF01',
-        dueDate: '2025-12-31',
-        qty: 1
-    },
-    {
-        lendingId: '01K5BXA2G9XYZ1234567890ABC',
-        itemId: 'OFS-20251101-0002',
-        itemName: 'オシロスコープ',
-        borrower: 'CD67890',
-        lender: 'STAFF01',
-        dueDate: '2025-12-20',
-        qty: 1
+function toArray(data) {
+    if (Array.isArray(data)) {
+        return data;
     }
-];
+    if (data && Array.isArray(data.items)) {
+        return data.items;
+    }
+    return [];
+}
 
-// === 履歴用モックデータ (新規追加) ===
-const mockLendingHistory = [
-    { itemId: 'OFS-20251101-0001', qty: 1, borrower: 'AB12345', regDate: '2025-11-01', dueDate: '2025-12-31' },
-    { itemId: 'OFS-20251101-0003', qty: 1, borrower: 'CD67890', regDate: '2025-11-10', dueDate: '2025-11-20' }
-];
+function escapeHtml(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
 
-const mockReturnHistory = [
-    { itemId: 'OFS-20251101-0002', qty: 1, borrower: 'AB12345', regDate: '2025-10-01', returnDate: '2025-10-15' },
-    { itemId: 'OFS-20251101-0004', qty: 2, borrower: 'EF12345', regDate: '2025-09-20', returnDate: '2025-09-25' }
-];
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
 
-// === コントローラー ===
+function formatDate(value) {
+    if (!value) {
+        return '';
+    }
+
+    if (typeof value === 'string') {
+        if (value.length >= 10) {
+            return value.slice(0, 10);
+        }
+        return value;
+    }
+
+    return String(value);
+}
+
+function getLendKey(item) {
+    if (!item) {
+        return '';
+    }
+
+    if (item.lend_ulid) {
+        return item.lend_ulid;
+    }
+    if (item.lend_id !== undefined && item.lend_id !== null) {
+        return String(item.lend_id);
+    }
+    if (item.lendingId) {
+        return item.lendingId;
+    }
+
+    return '';
+}
+
+function getLendQuantity(item) {
+    if (!item) {
+        return 1;
+    }
+
+    if (item.quantity !== undefined && item.quantity !== null && item.quantity !== '') {
+        return item.quantity;
+    }
+    if (item.qty !== undefined && item.qty !== null && item.qty !== '') {
+        return item.qty;
+    }
+
+    return 1;
+}
+
+function showApiError(err, fallbackMessage) {
+    const message =
+        err &&
+            err.response &&
+            err.response.data &&
+            err.response.data.message
+            ? err.response.data.message
+            : fallbackMessage;
+
+    alert(message);
+}
+
 window.LendReturnController = {
-    // --- 貸出 ---
-    saveLendInput() {
-        const form = document.getElementById('form-lend');
-        if (form && form.reportValidity()) {
-            const formData = new FormData(form);
-            for (let [key, val] of formData.entries()) {
-                lendState.data[key] = val;
+    async NfcRead(targetName) {
+        const input = document.querySelector('input[name="' + targetName + '"]');
+
+        if (!input) {
+            console.error('target input not found:', targetName);
+            return;
+        }
+
+        try {
+            const result = await scanStudentIdWithRetry(9, 2000);
+
+            if (result.ok) {
+                input.value = result.studentId;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                return;
             }
-            Router.to('lend-confirm');
+
+            if (result.cancelled) {
+                return;
+            }
+
+            alert('NFC読み取り失敗: ' + result.error);
+        } catch (err) {
+            console.error('scan error:', err);
+            alert('NFC読み取り中にエラーが発生しました');
         }
     },
 
-    submitLend() {
-        console.log('Lending Submit:', lendState.data);
+    saveLendInput() {
+        const form = document.getElementById('form-lend');
+
+        if (!form || !form.reportValidity()) {
+            return;
+        }
+
+        const formData = new FormData(form);
         lendState.data = {};
-        CommonController.showComplete('貸出登録が完了しました');
+
+        for (let pair of formData.entries()) {
+            lendState.data[pair[0]] = pair[1];
+        }
+
+        Router.to('lend-confirm');
     },
 
-    // 貸出履歴の「返却」ボタン押下時
-    triggerQuickReturn(itemId) {
-        alert(`備品番号: ${itemId} の返却処理へ進みます(デモ)`);
-        // 必要ならここで return-input 画面へデータを持って遷移させることも可能
+    async submitLend() {
+        try {
+            const payload = {
+                management_number: lendState.data.itemId,
+                quantity: Number(lendState.data.qty),
+                borrower_id: lendState.data.borrower,
+                due_on: lendState.data.dueDate ? lendState.data.dueDate : null,
+                lent_by_id: lendState.data.lender ? lendState.data.lender : null
+            };
+
+            await API.lending.register(payload);
+
+            lendState.data = {};
+            CommonController.showComplete('貸出登録が完了しました');
+        } catch (err) {
+            console.error('submitLend error:', err);
+            showApiError(err, '貸出登録に失敗しました');
+        }
     },
 
-    // --- 返却 ---
-    // P12: 貸出情報の検索
-    searchLending() {
-        const query = document.getElementById('return-search-query').value;
+    async triggerQuickReturn(lendKey) {
+        if (!lendKey) {
+            alert('貸出番号が取得できません');
+            return;
+        }
+
+        try {
+            const result = await API.lending.getLend(lendKey);
+            returnState.targetLending = result;
+            Router.to('return-input');
+        } catch (err) {
+            console.error('triggerQuickReturn error:', err);
+            showApiError(err, '返却対象の取得に失敗しました');
+        }
+    },
+
+    async searchLending() {
+        const input = document.getElementById('return-search-query');
+        const query = input ? input.value.trim() : '';
+
         if (!query) {
             alert('備品番号または貸出先を入力してください');
             return;
         }
 
-        // モックデータから検索 (本来はAPIコール)
-        const hit = mockActiveLendings.find(item => item.itemId === query || item.borrower === query);
+        try {
+            let list = toArray(await API.lending.fetchLends({
+                management_number: query,
+                returned: false,
+                limit: 20
+            }));
 
-        if (hit) {
-            returnState.targetLending = hit; // 検索結果を保持
-            console.log('Hit:', hit);
+            if (list.length === 0) {
+                list = toArray(await API.lending.fetchLends({
+                    borrower_id: query,
+                    returned: false,
+                    limit: 20
+                }));
+            }
+
+            if (list.length === 0) {
+                alert('該当する貸出情報が見つかりません');
+                return;
+            }
+
+            returnState.targetLending = list[0];
             Router.to('return-input');
-        } else {
-            alert('該当する貸出情報が見つかりません。\n(テスト用: OFS-20251101-0001 で検索してみてください)');
+        } catch (err) {
+            console.error('searchLending error:', err);
+            showApiError(err, '貸出検索に失敗しました');
         }
     },
 
-    // P13: 返却情報の入力保存
     saveReturnInput() {
         const form = document.getElementById('form-return');
-        if (form && form.reportValidity()) {
-            const formData = new FormData(form);
-            for (let [key, val] of formData.entries()) {
-                returnState.inputData[key] = val;
-            }
-            Router.to('return-confirm');
+
+        if (!form || !form.reportValidity()) {
+            return;
+        }
+
+        const formData = new FormData(form);
+        returnState.inputData = {};
+
+        for (let pair of formData.entries()) {
+            returnState.inputData[pair[0]] = pair[1];
+        }
+
+        Router.to('return-confirm');
+    },
+
+    async submitReturn() {
+        if (!returnState.targetLending) {
+            alert('返却対象がありません');
+            return;
+        }
+
+        const lendKey = getLendKey(returnState.targetLending);
+
+        if (!lendKey) {
+            alert('貸出番号が取得できません');
+            return;
+        }
+
+        try {
+            const payload = {
+                quantity: Number(returnState.inputData.returnQty || getLendQuantity(returnState.targetLending) || 1),
+                processed_by_id: returnState.inputData.returner,
+                note: returnState.inputData.note ? returnState.inputData.note : null
+            };
+
+            await API.lending.returnAsset(lendKey, payload);
+
+            returnState.targetLending = null;
+            returnState.inputData = {};
+            CommonController.showComplete('返却処理が完了しました');
+        } catch (err) {
+            console.error('submitReturn error:', err);
+            showApiError(err, '返却処理に失敗しました');
         }
     },
 
-    submitReturn() {
-        console.log('Return Submit:', {
-            original: returnState.targetLending,
-            returnInfo: returnState.inputData
-        });
-        // alert('返却処理が完了しました');
-        // returnState.targetLending = null;
-        // returnState.inputData = {};
-        // Router.to('return-menu');
-        returnState.targetLending = null;
-        returnState.inputData = {};
-        CommonController.showComplete('返却処理が完了しました');
-    }
+    async loadLendHistory() {
+        const tbody = document.getElementById('lend-history-body');
 
-};
+        if (!tbody) {
+            return;
+        }
 
-// === 画面初期化 ===
-export function initLendReturn(view) {
-    // 貸出確認画面
-    if (view === 'lend-confirm') {
-        const display = document.getElementById('lend-confirm-view');
-        if (display) {
-            display.innerHTML = `
-                <div class="info-row"><span class="info-label">備品番号</span><span>${lendState.data.itemId}</span></div>
-                <div class="info-row"><span class="info-label">数量</span><span>${lendState.data.qty}</span></div>
-                <div class="info-row"><span class="info-label">貸出先</span><span>${lendState.data.borrower}</span></div>
-                <div class="info-row"><span class="info-label">返却予定</span><span>${lendState.data.dueDate}</span></div>
-                <div class="info-row"><span class="info-label">実行者</span><span>${lendState.data.lender}</span></div>
-            `;
+        try {
+            const list = toArray(await API.lending.fetchLends({ limit: 100 }));
+
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6">データがありません</td></tr>';
+                return;
+            }
+
+            let html = '';
+
+            for (let item of list) {
+                const lendKey = getLendKey(item);
+
+                html += `
+                    <tr>
+                        <td>${escapeHtml(item.management_number || '')}</td>
+                        <td>${escapeHtml(getLendQuantity(item))}</td>
+                        <td>${escapeHtml(item.borrower_id || '')}</td>
+                        <td>${escapeHtml(formatDate(item.lent_at || item.created_at || ''))}</td>
+                        <td>${escapeHtml(formatDate(item.due_on || ''))}</td>
+                    </tr>
+                `;
+            }
+
+            tbody.innerHTML = html;
+        } catch (err) {
+            console.error('loadLendHistory error:', err);
+            tbody.innerHTML = '<tr><td colspan="6">読み込みに失敗しました</td></tr>';
+        }
+    },
+
+    async loadReturnHistory() {
+        const tbody = document.getElementById('return-history-body');
+
+        if (!tbody) {
+            return;
+        }
+
+        try {
+            const list = toArray(await API.lending.fetchReturns({ limit: 100 }));
+
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
+                return;
+            }
+
+            let html = '';
+
+            for (let item of list) {
+                html += `
+                    <tr>
+                        <td>${escapeHtml(item.management_number || '')}</td>
+                        <td>${escapeHtml(item.quantity || '')}</td>
+                        <td>${escapeHtml(item.borrower_id || '')}</td>
+                        <td>${escapeHtml(formatDate(item.lent_at || item.lent_on || item.created_at || ''))}</td>
+                        <td>${escapeHtml(formatDate(item.returned_at || item.processed_at || ''))}</td>
+                    </tr>
+                `;
+            }
+
+            tbody.innerHTML = html;
+        } catch (err) {
+            console.error('loadReturnHistory error:', err);
+            tbody.innerHTML = '<tr><td colspan="5">読み込みに失敗しました</td></tr>';
         }
     }
-    // 返却入力画面 (検索結果を表示)
-    else if (view === 'return-input') {
+};
+
+export function initLendReturn(view) {
+    if (view === 'lend-confirm') {
+        const display = document.getElementById('lend-confirm-view');
+
+        if (display) {
+            display.innerHTML = `
+                <div class="info-row"><span class="info-label">備品番号</span><span>${escapeHtml(lendState.data.itemId || '')}</span></div>
+                <div class="info-row"><span class="info-label">数量</span><span>${escapeHtml(lendState.data.qty || '')}</span></div>
+                <div class="info-row"><span class="info-label">貸出先</span><span>${escapeHtml(lendState.data.borrower || '')}</span></div>
+                <div class="info-row"><span class="info-label">返却予定</span><span>${escapeHtml(lendState.data.dueDate || '')}</span></div>
+                <div class="info-row"><span class="info-label">実行者</span><span>${escapeHtml(lendState.data.lender || '')}</span></div>
+            `;
+        }
+    } else if (view === 'return-input') {
         const target = returnState.targetLending;
+
         if (!target) {
             alert('不正な遷移です');
             Router.to('return-search');
             return;
         }
 
-        // 検索結果(読み取り専用)をDOMにセット
-        document.getElementById('disp-lending-id').value = target.lendingId;
-        document.getElementById('disp-qty').value = target.qty;
-        document.getElementById('disp-borrower').value = target.borrower;
-
-        // 返却日のデフォルト
+        const lendingIdInput = document.getElementById('disp-lending-id');
+        const qtyInput = document.getElementById('disp-qty');
+        const borrowerInput = document.getElementById('disp-borrower');
         const dateInput = document.querySelector('input[name="returnDate"]');
-        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
-    }
-    // 返却確認画面
-    else if (view === 'return-confirm') {
+
+        if (lendingIdInput) {
+            lendingIdInput.value = getLendKey(target);
+        }
+
+        if (qtyInput) {
+            qtyInput.value = getLendQuantity(target);
+        }
+
+        if (borrowerInput) {
+            borrowerInput.value = target.borrower_id || target.borrower || '';
+        }
+
+        if (dateInput) {
+            dateInput.value = new Date().toISOString().split('T')[0];
+        }
+    } else if (view === 'return-confirm') {
         const display = document.getElementById('return-confirm-view');
         const target = returnState.targetLending;
         const input = returnState.inputData;
 
         if (display && target) {
             display.innerHTML = `
-                <div class="info-row"><span class="info-label">貸出番号</span><span style="font-size:0.8em">${target.lendingId}</span></div>
-                <div class="info-row"><span class="info-label">備品</span><span>${target.itemName} (${target.itemId})</span></div>
-                <div class="info-row"><span class="info-label">返却日</span><span>${input.returnDate}</span></div>
-                <div class="info-row"><span class="info-label">実行者</span><span>${input.returner}</span></div>
+                <div class="info-row"><span class="info-label">貸出番号</span><span style="font-size:0.8em">${escapeHtml(getLendKey(target))}</span></div>
+                <div class="info-row"><span class="info-label">備品番号</span><span>${escapeHtml(target.management_number || target.itemId || '')}</span></div>
+                <div class="info-row"><span class="info-label">返却日</span><span>${escapeHtml(input.returnDate || '')}</span></div>
+                <div class="info-row"><span class="info-label">実行者</span><span>${escapeHtml(input.returner || '')}</span></div>
             `;
         }
     }
-    // 貸出履歴の描画
+
     if (view === 'lend-history') {
-        const tbody = document.getElementById('lend-history-body');
-        if (tbody) {
-            tbody.innerHTML = mockLendingHistory.map(item => `
-                <tr>
-                    <td>${item.itemId}</td>
-                    <td>${item.qty}</td>
-                    <td>${item.borrower}</td>
-                    <td>${item.regDate}</td>
-                    <td>${item.dueDate}</td>
-                    <td style="text-align:center;">
-                        <button class="sm-btn" onclick="LendReturnController.triggerQuickReturn('${item.itemId}')">返却</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-    }
-    // 返却履歴の描画
-    else if (view === 'return-history') {
-        const tbody = document.getElementById('return-history-body');
-        if (tbody) {
-            tbody.innerHTML = mockReturnHistory.map(item => `
-                <tr>
-                    <td>${item.itemId}</td>
-                    <td>${item.qty}</td>
-                    <td>${item.borrower}</td>
-                    <td>${item.regDate}</td>
-                    <td>${item.returnDate}</td>
-                </tr>
-            `).join('');
-        }
+        window.LendReturnController.loadLendHistory();
+    } else if (view === 'return-history') {
+        window.LendReturnController.loadReturnHistory();
     }
 }

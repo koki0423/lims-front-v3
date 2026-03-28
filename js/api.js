@@ -3,10 +3,10 @@ import { getAdminToken, clearAdminToken } from './token.js';
 
 
 //開発環境用APIベースURL
-// const API_BASE_URL = 'http://localhost:8443';
+const API_BASE_URL = 'http://localhost:8443';
 
 // 本番環境用APIベースURL
-const API_BASE_URL = '';
+// const API_BASE_URL = '';
 
 
 // axiosインスタンス
@@ -20,26 +20,26 @@ const client = axios.create({
 
 // レスポンス処理用インターセプター
 client.interceptors.request.use((config) => {
-  const token = getAdminToken();
-  if (token) {
-    if (!config.headers) config.headers = {};
-    config.headers['Authorization'] = `Bearer ${token}`;
-  }
-  return config;
+    const token = getAdminToken();
+    if (token) {
+        if (!config.headers) config.headers = {};
+        config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
 });
 
 client.interceptors.response.use(
-  (res) => res.data,
-  (err) => {
-    const status = err?.response?.status;
-    if (status === 401) {
-      clearAdminToken();
-      // Router は window.Router を使う（router.jsで global 公開してる） :contentReference[oaicite:8]{index=8}
-      if (window.Router) window.Router.to('admin-login');
+    (res) => res.data,
+    (err) => {
+        const status = err?.response?.status;
+        if (status === 401) {
+            clearAdminToken();
+            // Router は window.Router を使う（router.jsで global 公開してる） :contentReference[oaicite:8]{index=8}
+            if (window.Router) window.Router.to('admin-login');
+        }
+        console.error('API Error:', err);
+        return Promise.reject(err);
     }
-    console.error('API Error:', err);
-    return Promise.reject(err);
-  }
 );
 
 // === 2. エンドポイント定義 (機能ごとにオブジェクトでまとめる) ===
@@ -99,10 +99,13 @@ export const API = {
     },
 
     // 貸出・返却
+    // 貸出・返却
     lending: {
-        register: (assetId, data) => client.post(`/api/v2/assets/${assetId}/lends`, data),
-        fetchLends: () => client.get('/api/v2/lends'),
-        returnAsset: (lendId, data) => client.post(`/api/v2/lends/${lendId}/returns`, data),
+        register: (payload) => client.post('/api/v2/lends', payload),
+        fetchLends: (params) => client.get('/api/v2/lends', { params }),
+        getLend: (lendKey) => client.get(`/api/v2/lends/${encodeURIComponent(lendKey)}`),
+        fetchReturns: (params) => client.get('/api/v2/returns', { params }),
+        returnAsset: (lendKey, payload) => client.post(`/api/v2/returns/key/${encodeURIComponent(lendKey)}`, payload),
     },
 
     // 廃棄
