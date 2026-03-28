@@ -254,6 +254,16 @@ window.RegController = {
         }
     },
 
+    // 一括登録用のテンプレートダウンロード
+    downloadBatchTemplate() {
+        const link = document.createElement('a');
+        link.href = '/assets/templates/batch_register_template.xlsx';
+        link.download = '一括登録テンプレート.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    },
+
     // 一括登録用 CSVアップロード処理
     async uploadCsv() {
         const fileInput = document.getElementById('file-csv');
