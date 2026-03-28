@@ -1,6 +1,5 @@
 import { NFCPortLib, Configuration, DetectionOption } from "./NFCPortLib.js";
 
-// encoding-japanese は HTML 側で <script> から読み込み済み前提
 const Encoding = window.Encoding;
 if (!Encoding) {
     throw new Error(
@@ -8,17 +7,41 @@ if (!Encoding) {
     );
 }
 
-// ヘルパー
 function _array_copy(dest, dest_offset, src, src_offset, length) {
     for (let idx = 0; idx < length; idx++) {
         dest[dest_offset + idx] = src[src_offset + idx];
     }
 }
 
-/**
- * NFC を 1 回だけ読んで学籍番号を返す
- * 失敗したら Error を投げる
- */
+function isNonRetryableError(err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const lower = message.toLowerCase();
+
+    if (lower.includes("cancel")) {
+        return true;
+    }
+    if (lower.includes("aborted")) {
+        return true;
+    }
+    if (lower.includes("notfounderror")) {
+        return true;
+    }
+    if (lower.includes("no device")) {
+        return true;
+    }
+    if (lower.includes("device not selected")) {
+        return true;
+    }
+    if (lower.includes("permission denied")) {
+        return true;
+    }
+    if (lower.includes("denied")) {
+        return true;
+    }
+
+    return false;
+}
+
 async function scanStudentIdOnce() {
     let lib = null;
 
@@ -29,7 +52,6 @@ async function scanStudentIdOnce() {
         await lib.init(config);
         await lib.open();
 
-        // FeliCa 検出用
         const detectOption = new DetectionOption(
             new Uint8Array([0x82, 0x77]),
             0,
@@ -40,7 +62,6 @@ async function scanStudentIdOnce() {
 
         const card = await lib.detectCard("iso18092", detectOption);
 
-        // 学籍番号読み出しコマンド
         const readStudentIdCommand = new Uint8Array([
             16, 0x06, 0, 0, 0, 0, 0, 0, 0, 0,
             1, 0x0b, 0x01, 1, 0x80, 0x00
@@ -72,7 +93,6 @@ async function scanStudentIdOnce() {
             type: "string"
         });
 
-        // 3〜10 桁目を学籍番号として抜き出し
         const studentId = decodedString.substring(3, 10);
 
         if (!studentId || studentId.length === 0) {
@@ -90,20 +110,12 @@ async function scanStudentIdOnce() {
     }
 }
 
-/**
- * リトライ付きの学籍番号読み取り
- *
- * @param {number} maxRetry 最大リトライ回数
- * @param {number} retryIntervalMs リトライ間隔(ms)
- * @returns {Promise<{ok: true, studentId: string} | {ok: false, error: string}>}
- */
 export async function scanStudentIdWithRetry(
     maxRetry = 9,
     retryIntervalMs = 2000
 ) {
     let lastError = null;
 
-    // 0 回目 + リトライ maxRetry 回、合計 maxRetry+1 トライ
     for (let attempt = 0; attempt <= maxRetry; attempt++) {
         try {
             const id = await scanStudentIdOnce();
@@ -113,11 +125,19 @@ export async function scanStudentIdWithRetry(
             };
         } catch (err) {
             lastError = err;
+
+            if (isNonRetryableError(err)) {
+                return {
+                    ok: false,
+                    error: err instanceof Error ? err.message : String(err),
+                    cancelled: true
+                };
+            }
+
             if (attempt === maxRetry) {
                 break;
             }
 
-            // 次の試行まで待つ
             await new Promise((resolve) => {
                 setTimeout(resolve, retryIntervalMs);
             });
@@ -126,9 +146,7 @@ export async function scanStudentIdWithRetry(
 
     return {
         ok: false,
-        error:
-            lastError instanceof Error
-                ? lastError.message
-                : String(lastError)
+        error: lastError instanceof Error ? lastError.message : String(lastError),
+        cancelled: false
     };
 }
