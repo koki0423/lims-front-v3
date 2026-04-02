@@ -6,11 +6,9 @@
 
     <form id="form-admin-login" onsubmit="event.preventDefault(); AdminController.login();">
         <div class="form-group">
-            <label>学籍番号 (NFC入力のみ)</label>
+            <label>学籍番号</label>
             <div class="input-with-btn">
-                <!-- 本番運用ではinputをreadonlyにする -->
-                <input type="text" name="adminId" id="admin-id" placeholder="スキャンしてください" required
-                    style="background:#eee;">
+                <input type="text" name="adminId" id="admin-id" placeholder="スキャンしてください" required>
                 <button type="button" class="nfc-btn" onclick="AdminController.NfcRead()">NFC入力</button>
             </div>
         </div>
