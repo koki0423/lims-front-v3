@@ -1,15 +1,16 @@
 import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
+import { escapeHtml } from '../../js/dom_utils.js';
+import { normalizePageResponse } from '../../js/pagination_utils.js';
 
 // === 状態管理 ===
 const itemListState = {
     items: [],
-    currentFilter: null, // 空文字=全表示, "1"=正常, "2"=故障...
-
-    // ページネーション用
+    currentFilter: '',
     currentPage: 1,
     itemsPerPage: 20,
-
+    totalPages: 1,
+    totalItems: 0,
     label: {
         codeType: 'QR',
         tapeWidth: 9,
@@ -27,18 +28,87 @@ const STATUS_MAP = {
     6: { name: '紛失', class: 'badge-error' }
 };
 
+async function ensureGenresLoaded() {
+    await AppState.loadGenres({ all: true });
+}
+
+function getItemFilterFn() {
+    if (itemListState.currentFilter === null || itemListState.currentFilter === '') {
+        return null;
+    }
+
+    return (item) => String(item.status_id || 1) === String(itemListState.currentFilter);
+}
+
+async function loadItemPage(page = 1) {
+    const tbody = document.getElementById('item-list-body');
+    const loader = document.getElementById('loading-spinner');
+    const safePage = Math.max(1, Number(page) || 1);
+    const params = {
+        limit: itemListState.itemsPerPage,
+        offset: (safePage - 1) * itemListState.itemsPerPage
+    };
+
+    if (itemListState.currentFilter !== null && itemListState.currentFilter !== '') {
+        params.status = itemListState.currentFilter;
+    }
+
+    if (loader) {
+        loader.style.display = 'block';
+    }
+
+    try {
+        await ensureGenresLoaded();
+
+        const response = await API.assets.fetchList(params);
+        const normalized = normalizePageResponse(response, {
+            page: safePage,
+            itemsPerPage: itemListState.itemsPerPage,
+            localFilter: getItemFilterFn()
+        });
+
+        itemListState.items = normalized.items;
+        itemListState.totalItems = normalized.totalItems;
+        itemListState.totalPages = normalized.totalPages;
+        itemListState.currentPage = Math.min(safePage, normalized.totalPages);
+
+        renderList();
+    } catch (error) {
+        console.error('Fetch error:', error);
+        itemListState.items = [];
+        itemListState.totalItems = 0;
+        itemListState.totalPages = 1;
+
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="5" style="color:red; text-align:center;">データの取得に失敗しました</td></tr>`;
+        }
+    } finally {
+        if (loader) {
+            loader.style.display = 'none';
+        }
+    }
+}
+
 window.ItemListController = {
-    // フィルタ切り替え
-    toggleFilter(status) {
+    async toggleFilter(status) {
         if (itemListState.currentFilter == status) {
-            itemListState.currentFilter = null;
+            itemListState.currentFilter = '';
         } else {
             itemListState.currentFilter = status;
         }
 
-        itemListState.currentPage = 1;
-        renderList();
         updateFilterButtonStyles();
+        await loadItemPage(1);
+    },
+
+    editByIndex(index) {
+        const item = itemListState.items[index];
+        if (!item) {
+            alert('対象データが見つかりません');
+            return;
+        }
+
+        this.edit(item.management_number || item.asset_id);
     },
 
     // 編集モーダルを開く
@@ -48,14 +118,11 @@ window.ItemListController = {
             const asset = data.asset;
             const master = data.master;
 
-            // === 1. ID等のセット (共通) ===
             document.getElementById('edit-asset-id').value = asset.asset_id;
             document.getElementById('edit-name').value = master.name || '';
             document.getElementById('edit-code').value = asset.management_number;
             document.getElementById('disp-current-location').value = asset.location || '-';
 
-
-            // === 2. 要素の取得 ===
             const qtyInput = document.getElementById('edit-qty');
             const qtyMsg = document.getElementById('qty-lock-msg');
             const statusSelect = document.getElementById('edit-status');
@@ -63,21 +130,17 @@ window.ItemListController = {
             const notesInput = document.getElementById('edit-notes');
             const statusOriginalInput = document.getElementById('edit-status-original');
 
-            // === 3. 値のセット ===
             qtyInput.value = asset.quantity;
             statusOriginalInput.value = String(asset.status_id);
             statusSelect.value = asset.status_id;
             locInput.value = asset.default_location || '';
             notesInput.value = asset.notes || '';
 
-            // === 4. ロック状態の初期化 (リセット) ===
-            // 一旦すべて有効化してから、条件に応じて無効化する
             statusSelect.disabled = false;
             locInput.disabled = false;
             notesInput.disabled = false;
 
-            // 数量ロックの判定 (シリアル有無)
-            const isSerial = (asset.serial && asset.serial.trim() !== "");
+            const isSerial = Boolean(asset.serial && asset.serial.trim() !== "");
             if (isSerial) {
                 qtyInput.disabled = true;
                 qtyInput.style.backgroundColor = "#f5f5f5";
@@ -88,32 +151,19 @@ window.ItemListController = {
                 if (qtyMsg) qtyMsg.style.display = "none";
             }
 
-
-            // === 5. ステータス別の特殊ロック処理 ===
-
-            // ケースA: 貸出中 (ID: 4)
-            // -> ステータス変更不可
             if (asset.status_id === 4) {
                 statusSelect.disabled = true;
-                // 念のため背景色も変えておくと親切かも
-                // statusSelect.style.backgroundColor = "#f5f5f5";
             }
 
-            // ケースB: 廃棄済み (ID: 5)
-            // -> 備考以外は一切変更不可
             if (asset.status_id === 5) {
                 statusSelect.disabled = true;
                 qtyInput.disabled = true;
                 locInput.disabled = true;
-
                 qtyInput.style.backgroundColor = "#f5f5f5";
                 locInput.style.backgroundColor = "#f5f5f5";
-                // statusSelect.style.backgroundColor = "#f5f5f5";
             }
 
-            // モーダル表示
             document.getElementById('edit-modal').style.display = 'flex';
-
         } catch (error) {
             console.error(error);
             alert('データの取得に失敗しました');
@@ -126,20 +176,15 @@ window.ItemListController = {
 
     async update() {
         const id = document.getElementById('edit-asset-id').value;
-
         const statusSelect = document.getElementById('edit-status');
         const statusOriginalVal = document.getElementById('edit-status-original').value;
-
         const locVal = document.getElementById('edit-location').value;
         const notesVal = document.getElementById('edit-notes').value;
 
         let statusId;
-
-        // select が有効で、かつ値が入っているときはそれを採用（正常/故障/修理中/紛失）
         if (!statusSelect.disabled && statusSelect.value !== '') {
             statusId = Number(statusSelect.value);
         } else {
-            // 貸出中(4) / 廃棄済み(5) など、option が無い or disabled で value="" のケース
             statusId = Number(statusOriginalVal);
         }
 
@@ -155,21 +200,16 @@ window.ItemListController = {
         }
 
         try {
-            // PUT /assets/:asset_id
             await API.assets.update(id, payload);
             alert('更新しました');
             this.closeModal();
-
-            if (typeof initItemList === 'function') {
-                initItemList();
-            } else {
-                window.location.reload();
-            }
+            await loadItemPage(itemListState.currentPage);
         } catch (error) {
             console.error(error);
             alert('更新に失敗しました: ' + (error.response?.data?.error || error.message));
         }
     },
+
     openLabelModal(managementNumber) {
         const modal = document.getElementById('label-modal');
         if (!modal) return;
@@ -182,11 +222,20 @@ window.ItemListController = {
         if (mgmtHidden) mgmtHidden.value = String(managementNumber);
         if (mgmtDisp) mgmtDisp.value = String(managementNumber);
 
-        // 前回選択を復元
         if (codeSel) codeSel.value = itemListState.label.codeType || 'QR';
         if (widthSel) widthSel.value = String(itemListState.label.tapeWidth || 9);
 
         modal.style.display = 'flex';
+    },
+
+    openLabelModalByIndex(index) {
+        const item = itemListState.items[index];
+        if (!item) {
+            alert('対象データが見つかりません');
+            return;
+        }
+
+        this.openLabelModal(item.management_number || item.asset_id);
     },
 
     closeLabelModal() {
@@ -206,63 +255,64 @@ window.ItemListController = {
             return;
         }
 
-        // 設定をstateに保存
         const rawCode = codeSel ? codeSel.value : 'QR';
         const codeType = rawCode === 'CODE128' ? 'CODE128' : 'QR';
 
         let tapeWidth = 9;
         if (widthSel) {
-            const n = parseInt(widthSel.value, 10);
-            tapeWidth = isNaN(n) ? 9 : n;
+            const parsedWidth = parseInt(widthSel.value, 10);
+            tapeWidth = Number.isNaN(parsedWidth) ? 9 : parsedWidth;
         }
 
         itemListState.label.codeType = codeType;
         itemListState.label.tapeWidth = tapeWidth;
         itemListState.label.halfcut = true;
 
-        if (btn) { btn.disabled = true; btn.textContent = '印刷中...'; }
-        
-        //　予備
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '印刷中...';
+        }
+
         await ensureGenresLoaded();
 
         try {
-            // マスタ情報を取得（編集と同じAPI）
             const data = await API.assets.getPair(managementNumber);
             const master = data.master;
-
             const payload = buildListPrintPayload(master, managementNumber, itemListState.label);
             await API.assets.printLabel(payload);
 
             alert('ラベル印刷を実行しました');
             this.closeLabelModal();
-        } catch (e) {
-            console.error('印刷エラー:', e);
-            alert('印刷に失敗しました: ' + (e.response?.data?.error || e.message));
+        } catch (error) {
+            console.error('印刷エラー:', error);
+            alert('印刷に失敗しました: ' + (error.response?.data?.error || error.message));
         } finally {
-            if (btn) { btn.disabled = false; btn.textContent = '印刷'; }
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '印刷';
+            }
         }
     },
-    // 表示件数変更
-    changePerPage(val) {
+
+    async changePerPage(val) {
         itemListState.itemsPerPage = Number(val);
-        itemListState.currentPage = 1; // 件数変えたら1ページ目に戻す
-        renderList();
+        await loadItemPage(1);
     },
 
-    // ページ切り替え
-    changePage(page) {
-        itemListState.currentPage = Number(page);
-        renderList();
+    async changePage(page) {
+        const targetPage = Number(page);
+        if (targetPage < 1 || targetPage > itemListState.totalPages) {
+            return;
+        }
+
+        await loadItemPage(targetPage);
     },
 };
 
 function buildListPrintPayload(masterPayload, managementNumber, labelSetting) {
     const type = labelSetting.codeType === 'QR' ? 'qrcode' : 'code128';
-
-    const gid = Number(masterPayload.genre_id);
-    const genreObj = AppState.genres.find(g => g.id === gid);
-    const g = genreById(masterPayload.genre_id);
-    const genreName = g ? (g.name ?? g.genre_name ?? '-') : '-';
+    const genre = AppState.getGenreById(masterPayload.genre_id, { all: true });
+    const genreName = genre ? (genre.name ?? genre.genre_name ?? '-') : '-';
 
     return {
         config: {
@@ -282,49 +332,18 @@ function buildListPrintPayload(masterPayload, managementNumber, labelSetting) {
     };
 }
 
-async function ensureGenresLoaded() {
-    if (AppState.genres && AppState.genres.length > 0) {
-        return;
-    }
-
-    const res = await API.genres.list(true);
-    const rows = res && res.data ? res.data : [];
-
-    AppState.genres = rows;
-}
-
-function genreById(id) {
-    const target = Number(id);
-    return AppState.genres.find(g => Number(g.id ?? g.genre_id) === target) || null;
-}
-
 // === 初期化処理 ===
 export async function initItemList() {
     itemListState.currentFilter = '';
+    itemListState.currentPage = 1;
     updateFilterButtonStyles();
 
     const tbody = document.getElementById('item-list-body');
-    const loader = document.getElementById('loading-spinner');
-
-    if (tbody) tbody.innerHTML = '';
-    if (loader) loader.style.display = 'block';
-
-    try {
-        // APIからデータ取得
-        // 事前にジャンルデータを確実にロードしておく（ラベル印刷のときに必要）
-        await ensureGenresLoaded();
-
-        // 戻り値例: { items: [...], next_offset: 0, total: 1 }
-        const response = await API.assets.fetchList();
-        itemListState.items = response.items || [];
-        renderList();
-
-    } catch (error) {
-        console.error('Fetch error:', error);
-        if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="color:red; text-align:center;">データの取得に失敗しました</td></tr>`;
-    } finally {
-        if (loader) loader.style.display = 'none';
+    if (tbody) {
+        tbody.innerHTML = '';
     }
+
+    await loadItemPage(1);
 }
 
 // === リスト描画 ===
@@ -333,82 +352,57 @@ function renderList() {
     const paginationDiv = document.getElementById('pagination-controls');
     if (!tbody) return;
 
-    // 1. フィルタリング
-    const filteredItems = itemListState.items.filter(item => {
-        if (itemListState.currentFilter === null || itemListState.currentFilter === '') {
-            return true;
-        }
-        const statusId = item.status_id || 1;
-        return String(statusId) === String(itemListState.currentFilter);
-    });
-
-    // 2. ページネーション計算
-    const totalItems = filteredItems.length;
-    const totalPages = Math.ceil(totalItems / itemListState.itemsPerPage) || 1;
-
-    // 現在ページが総ページを超えていたら補正
-    if (itemListState.currentPage > totalPages) {
-        itemListState.currentPage = totalPages;
-    }
-
-    const startIndex = (itemListState.currentPage - 1) * itemListState.itemsPerPage;
-    const endIndex = startIndex + itemListState.itemsPerPage;
-
-    // 3. 表示するデータだけ切り出す
-    const displayItems = filteredItems.slice(startIndex, endIndex);
-
-    // 4. データ描画
-    if (displayItems.length === 0) {
+    if (itemListState.items.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">該当する備品はありません</td></tr>';
-        paginationDiv.innerHTML = '';
+        if (paginationDiv) {
+            paginationDiv.innerHTML = '';
+        }
         return;
     }
 
-    tbody.innerHTML = displayItems.map(item => {
+    tbody.innerHTML = itemListState.items.map((item, index) => {
         const statusId = item.status_id || 1;
         const statusObj = STATUS_MAP[statusId] || { name: '不明', class: 'badge-gray' };
         const displayId = item.management_number || item.asset_id || '-';
         const displayName = item.name || `(マスタID: ${item.asset_master_id})`;
-        const mgmtNum = item.management_number || item.asset_id;
-        const genreObj = AppState.genres.find(g => g.id === item.genre_id);
-        const genreName = genreObj ? genreObj.name : '-';
 
         return `
             <tr>
-                <td style="padding: 12px 5px;">${displayId}</td>
-                <td style="padding: 12px 5px;">${displayName}</td>
-                <td style="padding: 12px 5px;">${item.quantity}</td>
+                <td style="padding: 12px 5px;">${escapeHtml(displayId)}</td>
+                <td style="padding: 12px 5px;">${escapeHtml(displayName)}</td>
+                <td style="padding: 12px 5px;">${escapeHtml(item.quantity)}</td>
                 <td style="text-align:center; padding: 12px 5px;">
                     <span class="status-badge ${statusObj.class}">${statusObj.name}</span>
                 </td>
                 <td style="text-align:center; padding: 12px 5px;">
-                    <button class="sm-btn" onclick="ItemListController.edit('${mgmtNum}')">編集</button>
-                    <button class="sm-btn" onclick="ItemListController.openLabelModal('${mgmtNum}')">ラベル印刷</button>
-                    </td>
+                    <button class="sm-btn" onclick="ItemListController.editByIndex(${index})">編集</button>
+                    <button class="sm-btn" onclick="ItemListController.openLabelModalByIndex(${index})">ラベル印刷</button>
+                </td>
             </tr>
         `;
     }).join('');
 
-    // 5. ページネーションボタン描画
-    renderPaginationControls(paginationDiv, totalPages, itemListState.currentPage);
+    renderPaginationControls(paginationDiv, itemListState.totalPages, itemListState.currentPage);
 }
 
 // ページボタン生成ロジック
 function renderPaginationControls(container, totalPages, currentPage) {
     if (!container) return;
 
-    let html = '';
+    if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
 
-    // [前へ] ボタン
+    let html = '';
     const prevDisabled = currentPage === 1 ? 'disabled' : '';
     html += `<button class="page-btn" ${prevDisabled} onclick="ItemListController.changePage(${currentPage - 1})">＜</button>`;
 
-    // ページ番号ボタン
-    // ページ数が多すぎる場合の省略ロジックを入れるならここを調整
     for (let i = 1; i <= totalPages; i++) {
-        // ページ数が多い場合、カレント周辺のみ表示するロジック
         if (totalPages > 10 && Math.abs(currentPage - i) > 2 && i !== 1 && i !== totalPages) {
-            if (html.slice(-3) !== '...') html += '<span style="padding:0 5px;">...</span>';
+            if (html.slice(-3) !== '...') {
+                html += '<span style="padding:0 5px;">...</span>';
+            }
             continue;
         }
 
@@ -416,7 +410,6 @@ function renderPaginationControls(container, totalPages, currentPage) {
         html += `<button class="page-btn ${activeClass}" onclick="ItemListController.changePage(${i})">${i}</button>`;
     }
 
-    // [次へ] ボタン
     const nextDisabled = currentPage === totalPages ? 'disabled' : '';
     html += `<button class="page-btn" ${nextDisabled} onclick="ItemListController.changePage(${currentPage + 1})">＞</button>`;
 
