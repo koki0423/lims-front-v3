@@ -60,7 +60,7 @@ export const API = {
         }),
 
         // ラベルテンプレートダウンロード
-        downloadTemplate: (width,type) => client.get(`/api/v2/assets/print/template?width=${width}&type=${type}`, { responseType: 'blob' }),
+        downloadTemplate: (width,type) => client.get(`/api/v2/assets/print/templates?width=${width}&type=${type}`, { responseType: 'blob' }),
 
         // ラベル印刷
         printLabel: (payload) => client.post('/api/v2/assets/print', payload),
