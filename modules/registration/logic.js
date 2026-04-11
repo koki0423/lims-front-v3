@@ -1,7 +1,7 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
-import { scanStudentIdWithRetry } from "../../js/nfcReader.js";
 import { AppState } from '../../js/app_state.js';
+import { escapeHtml, toLocalDateTimeIso } from '../../js/dom_utils.js';
 
 // =====================================
 // 定数・ヘルパ
@@ -306,7 +306,7 @@ function buildPayloadsFromState() {
         asset: {
             serial: regState.type === 'individual' ? (d.serial || null) : null,
             quantity: regState.type === 'bulk' ? Number(d.quantity || 1) : 1,
-            purchased_at: d.purchaseDate ? new Date(d.purchaseDate).toISOString() : new Date().toISOString(),
+            purchased_at: d.purchaseDate ? toLocalDateTimeIso(d.purchaseDate) : toLocalDateTimeIso(new Date()),
             status_id: 1, // 新規登録時は「正常」
             owner: d.registrant || null,
             default_location: d.location || null,
@@ -438,6 +438,7 @@ window.RegController = {
         if (!input) return;
 
         try {
+            const { scanStudentIdWithRetry } = await loadNfcReader();
             const result = await scanStudentIdWithRetry(9, 2000);
             if (!result?.ok || !result.studentId) {
                 throw new Error('学生証の読み取りに失敗しました');
@@ -684,8 +685,9 @@ function updateInputVisibility() {
 // =====================================
 // Router から呼ばれる初期化フック
 // =====================================
-export function initRegistration(step) {
+export async function initRegistration(step) {
     if (step === 'step1') {
+        await AppState.ensureMasterData();
         renderGenreOptions();
         const form = document.getElementById('form-reg-1');
         if (form && regState.data) restoreFormData(form, regState.data);

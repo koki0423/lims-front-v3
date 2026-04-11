@@ -1,10 +1,55 @@
 import { NFCPortLib, Configuration, DetectionOption } from "./NFCPortLib.js";
 
-const Encoding = window.Encoding;
-if (!Encoding) {
-    throw new Error(
-        "Encoding (encoding-japanese) が見つかりません。HTML に encoding.min.js を読み込んでください。"
-    );
+let encodingLoaderPromise = null;
+
+async function ensureEncodingLoaded() {
+    if (window.Encoding) {
+        return window.Encoding;
+    }
+
+    if (!encodingLoaderPromise) {
+        encodingLoaderPromise = new Promise((resolve, reject) => {
+            const existingScript = document.querySelector('script[data-encoding-japanese="1"]');
+
+            if (existingScript) {
+                existingScript.addEventListener('load', () => {
+                    if (window.Encoding) {
+                        resolve(window.Encoding);
+                        return;
+                    }
+
+                    reject(new Error('encoding-japanese の読み込みに失敗しました。'));
+                }, { once: true });
+
+                existingScript.addEventListener('error', () => {
+                    reject(new Error('encoding-japanese の取得に失敗しました。'));
+                }, { once: true });
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/encoding-japanese@1.0.30/encoding.min.js';
+            script.async = true;
+            script.dataset.encodingJapanese = '1';
+            script.addEventListener('load', () => {
+                if (window.Encoding) {
+                    resolve(window.Encoding);
+                    return;
+                }
+
+                reject(new Error('encoding-japanese の読み込みに失敗しました。'));
+            }, { once: true });
+            script.addEventListener('error', () => {
+                reject(new Error('encoding-japanese の取得に失敗しました。'));
+            }, { once: true });
+            document.head.appendChild(script);
+        }).catch((error) => {
+            encodingLoaderPromise = null;
+            throw error;
+        });
+    }
+
+    return encodingLoaderPromise;
 }
 
 function _array_copy(dest, dest_offset, src, src_offset, length) {
@@ -44,6 +89,7 @@ function isNonRetryableError(err) {
 
 async function scanStudentIdOnce() {
     let lib = null;
+    const Encoding = await ensureEncodingLoaded();
 
     try {
         lib = new NFCPortLib();

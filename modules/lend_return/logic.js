@@ -1,47 +1,46 @@
-import { Router } from '/js/router.js';
-import { API } from '/js/api.js';
-import { scanStudentIdWithRetry } from "/js/nfcReader.js";
+import { Router } from '../../js/router.js';
+import { API } from '../../js/api.js';
+import { escapeHtml, toDateInputValue } from '../../js/dom_utils.js';
+import { normalizePageResponse } from '../../js/pagination_utils.js';
 
 const lendState = {
     data: {},
     history: {
         items: [],
         currentPage: 1,
-        itemsPerPage: 20
+        itemsPerPage: 20,
+        totalPages: 1,
+        totalItems: 0
     }
 };
 
 const returnState = {
     targetLending: null,
+    searchResults: [],
     inputData: {},
     history: {
         items: [],
         currentPage: 1,
-        itemsPerPage: 20
+        itemsPerPage: 20,
+        totalPages: 1,
+        totalItems: 0
     }
 };
+
+async function loadNfcReader() {
+    return import('../../js/nfcReader.js');
+}
 
 function toArray(data) {
     if (Array.isArray(data)) {
         return data;
     }
+
     if (data && Array.isArray(data.items)) {
         return data.items;
     }
+
     return [];
-}
-
-function escapeHtml(value) {
-    if (value === null || value === undefined) {
-        return '';
-    }
-
-    return String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
 }
 
 function formatDate(value) {
@@ -92,16 +91,146 @@ function getLendQuantity(item) {
     return 1;
 }
 
-function showApiError(err, fallbackMessage) {
-    const message =
-        err &&
-            err.response &&
-            err.response.data &&
-            err.response.data.message
-            ? err.response.data.message
-            : fallbackMessage;
-
+function showApiError(error, fallbackMessage) {
+    const message = error?.response?.data?.message || error?.response?.data?.error || fallbackMessage;
     alert(message);
+}
+
+function assignHistoryPage(historyState, response, page) {
+    const normalized = normalizePageResponse(response, {
+        page,
+        itemsPerPage: historyState.itemsPerPage
+    });
+
+    historyState.items = normalized.items;
+    historyState.totalItems = normalized.totalItems;
+    historyState.totalPages = normalized.totalPages;
+    historyState.currentPage = Math.min(page, normalized.totalPages);
+}
+
+function renderReturnSelection() {
+    const tbody = document.getElementById('return-search-result-body');
+    if (!tbody) {
+        return;
+    }
+
+    if (!returnState.searchResults || returnState.searchResults.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">候補がありません</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = returnState.searchResults.map((item, index) => `
+        <tr>
+            <td>${escapeHtml(item.management_number || '')}</td>
+            <td>${escapeHtml(getLendQuantity(item))}</td>
+            <td>${escapeHtml(item.borrower_id || item.borrower || '')}</td>
+            <td>${escapeHtml(formatDate(item.lent_at || item.created_at || ''))}</td>
+            <td style="text-align:center;">
+                <button class="sm-btn" onclick="LendReturnController.selectReturnTarget(${index})">選択</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function renderLendHistory() {
+    const tbody = document.getElementById('lend-history-body');
+    const pagination = document.getElementById('lend-history-pagination');
+
+    if (!tbody) {
+        return;
+    }
+
+    if (!lendState.history.items || lendState.history.items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
+        if (pagination) {
+            pagination.innerHTML = '';
+        }
+        return;
+    }
+
+    tbody.innerHTML = lendState.history.items.map((item) => `
+        <tr>
+            <td>${escapeHtml(item.management_number || '')}</td>
+            <td>${escapeHtml(getLendQuantity(item))}</td>
+            <td>${escapeHtml(item.borrower_id || '')}</td>
+            <td>${escapeHtml(formatDate(item.lent_at || item.created_at || ''))}</td>
+            <td>${escapeHtml(formatDate(item.due_on || ''))}</td>
+        </tr>
+    `).join('');
+
+    renderHistoryPagination(pagination, lendState.history.totalPages, lendState.history.currentPage, 'lend');
+}
+
+function renderReturnHistory() {
+    const tbody = document.getElementById('return-history-body');
+    const pagination = document.getElementById('return-history-pagination');
+
+    if (!tbody) {
+        return;
+    }
+
+    if (!returnState.history.items || returnState.history.items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
+        if (pagination) {
+            pagination.innerHTML = '';
+        }
+        return;
+    }
+
+    tbody.innerHTML = returnState.history.items.map((item) => `
+        <tr>
+            <td>${escapeHtml(item.management_number || '')}</td>
+            <td>${escapeHtml(item.quantity || '')}</td>
+            <td>${escapeHtml(item.borrower_id || '')}</td>
+            <td>${escapeHtml(formatDate(item.lent_at || item.lent_on || item.created_at || ''))}</td>
+            <td>${escapeHtml(formatDate(item.returned_at || item.processed_at || ''))}</td>
+        </tr>
+    `).join('');
+
+    renderHistoryPagination(pagination, returnState.history.totalPages, returnState.history.currentPage, 'return');
+}
+
+function renderHistoryPagination(container, totalPages, currentPage, type) {
+    if (!container) {
+        return;
+    }
+
+    if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+
+    if (type === 'lend') {
+        html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="LendReturnController.changeLendHistoryPage(${currentPage - 1})">＜</button>`;
+    } else {
+        html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="LendReturnController.changeReturnHistoryPage(${currentPage - 1})">＜</button>`;
+    }
+
+    for (let i = 1; i <= totalPages; i++) {
+        if (totalPages > 10 && Math.abs(currentPage - i) > 2 && i !== 1 && i !== totalPages) {
+            if (html.indexOf('...') === -1 || !html.endsWith('</span>')) {
+                html += '<span style="padding:0 5px;">...</span>';
+            }
+            continue;
+        }
+
+        const activeClass = i === currentPage ? 'active' : '';
+        if (type === 'lend') {
+            html += `<button class="page-btn ${activeClass}" onclick="LendReturnController.changeLendHistoryPage(${i})">${i}</button>`;
+        } else {
+            html += `<button class="page-btn ${activeClass}" onclick="LendReturnController.changeReturnHistoryPage(${i})">${i}</button>`;
+        }
+    }
+
+    if (type === 'lend') {
+        html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="LendReturnController.changeLendHistoryPage(${currentPage + 1})">＞</button>`;
+    } else {
+        html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="LendReturnController.changeReturnHistoryPage(${currentPage + 1})">＞</button>`;
+    }
+
+    container.innerHTML = html;
 }
 
 window.LendReturnController = {
@@ -114,6 +243,7 @@ window.LendReturnController = {
         }
 
         try {
+            const { scanStudentIdWithRetry } = await loadNfcReader();
             const result = await scanStudentIdWithRetry(9, 2000);
 
             if (result.ok) {
@@ -128,23 +258,21 @@ window.LendReturnController = {
             }
 
             alert('NFC読み取り失敗: ' + result.error);
-        } catch (err) {
-            console.error('scan error:', err);
+        } catch (error) {
+            console.error('scan error:', error);
             alert('NFC読み取り中にエラーが発生しました');
         }
     },
 
     saveLendInput() {
         const form = document.getElementById('form-lend');
-
         if (!form || !form.reportValidity()) {
             return;
         }
 
         const formData = new FormData(form);
         lendState.data = {};
-
-        for (let pair of formData.entries()) {
+        for (const pair of formData.entries()) {
             lendState.data[pair[0]] = pair[1];
         }
 
@@ -162,12 +290,11 @@ window.LendReturnController = {
             };
 
             await API.lending.register(payload);
-
             lendState.data = {};
             CommonController.showComplete('貸出登録が完了しました');
-        } catch (err) {
-            console.error('submitLend error:', err);
-            showApiError(err, '貸出登録に失敗しました');
+        } catch (error) {
+            console.error('submitLend error:', error);
+            showApiError(error, '貸出登録に失敗しました');
         }
     },
 
@@ -180,10 +307,11 @@ window.LendReturnController = {
         try {
             const result = await API.lending.getLend(lendKey);
             returnState.targetLending = result;
+            returnState.searchResults = [];
             Router.to('return-input');
-        } catch (err) {
-            console.error('triggerQuickReturn error:', err);
-            showApiError(err, '返却対象の取得に失敗しました');
+        } catch (error) {
+            console.error('triggerQuickReturn error:', error);
+            showApiError(error, '返却対象の取得に失敗しました');
         }
     },
 
@@ -216,25 +344,48 @@ window.LendReturnController = {
                 return;
             }
 
-            returnState.targetLending = list[0];
-            Router.to('return-input');
-        } catch (err) {
-            console.error('searchLending error:', err);
-            showApiError(err, '貸出検索に失敗しました');
+            if (list.length === 1) {
+                returnState.targetLending = list[0];
+                returnState.searchResults = [];
+                Router.to('return-input');
+                return;
+            }
+
+            returnState.targetLending = null;
+            returnState.searchResults = list;
+            Router.to('return-select');
+        } catch (error) {
+            console.error('searchLending error:', error);
+            showApiError(error, '貸出検索に失敗しました');
         }
+    },
+
+    selectReturnTarget(index) {
+        const target = returnState.searchResults[index];
+        if (!target) {
+            alert('返却候補が見つかりません');
+            return;
+        }
+
+        returnState.targetLending = target;
+        Router.to('return-input');
+    },
+
+    backToReturnSearch() {
+        returnState.targetLending = null;
+        returnState.searchResults = [];
+        Router.to('return-search');
     },
 
     saveReturnInput() {
         const form = document.getElementById('form-return');
-
         if (!form || !form.reportValidity()) {
             return;
         }
 
         const formData = new FormData(form);
         returnState.inputData = {};
-
-        for (let pair of formData.entries()) {
+        for (const pair of formData.entries()) {
             returnState.inputData[pair[0]] = pair[1];
         }
 
@@ -248,7 +399,6 @@ window.LendReturnController = {
         }
 
         const lendKey = getLendKey(returnState.targetLending);
-
         if (!lendKey) {
             alert('貸出番号が取得できません');
             return;
@@ -262,228 +412,88 @@ window.LendReturnController = {
             };
 
             await API.lending.returnAsset(lendKey, payload);
-
             returnState.targetLending = null;
+            returnState.searchResults = [];
             returnState.inputData = {};
             CommonController.showComplete('返却処理が完了しました');
-        } catch (err) {
-            console.error('submitReturn error:', err);
-            showApiError(err, '返却処理に失敗しました');
+        } catch (error) {
+            console.error('submitReturn error:', error);
+            showApiError(error, '返却処理に失敗しました');
         }
     },
 
-    //ページネーション
-    changeLendHistoryPerPage(value) {
+    async changeLendHistoryPerPage(value) {
         lendState.history.itemsPerPage = Number(value);
-        lendState.history.currentPage = 1;
-        renderLendHistory();
+        await this.loadLendHistory(1);
     },
 
-    changeLendHistoryPage(page) {
-        lendState.history.currentPage = Number(page);
-        renderLendHistory();
+    async changeLendHistoryPage(page) {
+        const targetPage = Number(page);
+        if (targetPage < 1 || targetPage > lendState.history.totalPages) {
+            return;
+        }
+
+        await this.loadLendHistory(targetPage);
     },
 
-    changeReturnHistoryPerPage(value) {
+    async changeReturnHistoryPerPage(value) {
         returnState.history.itemsPerPage = Number(value);
-        returnState.history.currentPage = 1;
-        renderReturnHistory();
+        await this.loadReturnHistory(1);
     },
 
-    changeReturnHistoryPage(page) {
-        returnState.history.currentPage = Number(page);
-        renderReturnHistory();
-    },
-    // ここまで
+    async changeReturnHistoryPage(page) {
+        const targetPage = Number(page);
+        if (targetPage < 1 || targetPage > returnState.history.totalPages) {
+            return;
+        }
 
-    async loadLendHistory() {
+        await this.loadReturnHistory(targetPage);
+    },
+
+    async loadLendHistory(page = 1) {
         const tbody = document.getElementById('lend-history-body');
-
         if (!tbody) {
             return;
         }
 
         try {
-            const list = toArray(await API.lending.fetchLends({ limit: 100 }));
+            const response = await API.lending.fetchLends({
+                limit: lendState.history.itemsPerPage,
+                offset: (page - 1) * lendState.history.itemsPerPage
+            });
 
-            lendState.history.items = list;
-            lendState.history.currentPage = 1;
-
+            assignHistoryPage(lendState.history, response, page);
             renderLendHistory();
-        } catch (err) {
-            console.error('loadLendHistory error:', err);
+        } catch (error) {
+            console.error('loadLendHistory error:', error);
             tbody.innerHTML = '<tr><td colspan="5">読み込みに失敗しました</td></tr>';
         }
     },
 
-    async loadReturnHistory() {
+    async loadReturnHistory(page = 1) {
         const tbody = document.getElementById('return-history-body');
-
         if (!tbody) {
             return;
         }
 
         try {
-            const list = toArray(await API.lending.fetchReturns({ limit: 100 }));
+            const response = await API.lending.fetchReturns({
+                limit: returnState.history.itemsPerPage,
+                offset: (page - 1) * returnState.history.itemsPerPage
+            });
 
-            returnState.history.items = list;
-            returnState.history.currentPage = 1;
-
+            assignHistoryPage(returnState.history, response, page);
             renderReturnHistory();
-        } catch (err) {
-            console.error('loadReturnHistory error:', err);
+        } catch (error) {
+            console.error('loadReturnHistory error:', error);
             tbody.innerHTML = '<tr><td colspan="5">読み込みに失敗しました</td></tr>';
         }
     },
 };
 
-function renderLendHistory() {
-    const tbody = document.getElementById('lend-history-body');
-    const pagination = document.getElementById('lend-history-pagination');
-
-    if (!tbody) {
-        return;
-    }
-
-    const items = lendState.history.items;
-    const itemsPerPage = lendState.history.itemsPerPage;
-    const currentPage = lendState.history.currentPage;
-
-    if (!items || items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
-        if (pagination) {
-            pagination.innerHTML = '';
-        }
-        return;
-    }
-
-    const totalItems = items.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-
-    if (lendState.history.currentPage > totalPages) {
-        lendState.history.currentPage = totalPages;
-    }
-
-    const startIndex = (lendState.history.currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const pageItems = items.slice(startIndex, endIndex);
-
-    let html = '';
-
-    for (let item of pageItems) {
-        html += `
-            <tr>
-                <td>${escapeHtml(item.management_number || '')}</td>
-                <td>${escapeHtml(getLendQuantity(item))}</td>
-                <td>${escapeHtml(item.borrower_id || '')}</td>
-                <td>${escapeHtml(formatDate(item.lent_at || item.created_at || ''))}</td>
-                <td>${escapeHtml(formatDate(item.due_on || ''))}</td>
-            </tr>
-        `;
-    }
-
-    tbody.innerHTML = html;
-    renderHistoryPagination(pagination, totalPages, lendState.history.currentPage, 'lend');
-}
-
-function renderReturnHistory() {
-    const tbody = document.getElementById('return-history-body');
-    const pagination = document.getElementById('return-history-pagination');
-
-    if (!tbody) {
-        return;
-    }
-
-    const items = returnState.history.items;
-    const itemsPerPage = returnState.history.itemsPerPage;
-    const currentPage = returnState.history.currentPage;
-
-    if (!items || items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
-        if (pagination) {
-            pagination.innerHTML = '';
-        }
-        return;
-    }
-
-    const totalItems = items.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-
-    if (returnState.history.currentPage > totalPages) {
-        returnState.history.currentPage = totalPages;
-    }
-
-    const startIndex = (returnState.history.currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const pageItems = items.slice(startIndex, endIndex);
-
-    let html = '';
-
-    for (let item of pageItems) {
-        html += `
-            <tr>
-                <td>${escapeHtml(item.management_number || '')}</td>
-                <td>${escapeHtml(item.quantity || '')}</td>
-                <td>${escapeHtml(item.borrower_id || '')}</td>
-                <td>${escapeHtml(formatDate(item.lent_at || item.lent_on || item.created_at || ''))}</td>
-                <td>${escapeHtml(formatDate(item.returned_at || item.processed_at || ''))}</td>
-            </tr>
-        `;
-    }
-
-    tbody.innerHTML = html;
-    renderHistoryPagination(pagination, totalPages, returnState.history.currentPage, 'return');
-}
-
-function renderHistoryPagination(container, totalPages, currentPage, type) {
-    if (!container) {
-        return;
-    }
-
-    if (totalPages <= 1) {
-        container.innerHTML = '';
-        return;
-    }
-
-    let html = '';
-
-    if (type === 'lend') {
-        html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="LendReturnController.changeLendHistoryPage(${currentPage - 1})">＜</button>`;
-    } else {
-        html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="LendReturnController.changeReturnHistoryPage(${currentPage - 1})">＜</button>`;
-    }
-
-    let i = 1;
-    for (i = 1; i <= totalPages; i++) {
-        if (totalPages > 10 && Math.abs(currentPage - i) > 2 && i !== 1 && i !== totalPages) {
-            if (html.indexOf('...') === -1 || !html.endsWith('</span>')) {
-                html += '<span style="padding:0 5px;">...</span>';
-            }
-            continue;
-        }
-
-        const activeClass = i === currentPage ? 'active' : '';
-
-        if (type === 'lend') {
-            html += `<button class="page-btn ${activeClass}" onclick="LendReturnController.changeLendHistoryPage(${i})">${i}</button>`;
-        } else {
-            html += `<button class="page-btn ${activeClass}" onclick="LendReturnController.changeReturnHistoryPage(${i})">${i}</button>`;
-        }
-    }
-
-    if (type === 'lend') {
-        html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="LendReturnController.changeLendHistoryPage(${currentPage + 1})">＞</button>`;
-    } else {
-        html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="LendReturnController.changeReturnHistoryPage(${currentPage + 1})">＞</button>`;
-    }
-
-    container.innerHTML = html;
-}
-
 export function initLendReturn(view) {
     if (view === 'lend-confirm') {
         const display = document.getElementById('lend-confirm-view');
-
         if (display) {
             display.innerHTML = `
                 <div class="info-row"><span class="info-label">備品番号</span><span>${escapeHtml(lendState.data.itemId || '')}</span></div>
@@ -493,9 +503,10 @@ export function initLendReturn(view) {
                 <div class="info-row"><span class="info-label">実行者</span><span>${escapeHtml(lendState.data.lender || '')}</span></div>
             `;
         }
+    } else if (view === 'return-select') {
+        renderReturnSelection();
     } else if (view === 'return-input') {
         const target = returnState.targetLending;
-
         if (!target) {
             alert('不正な遷移です');
             Router.to('return-search');
@@ -510,17 +521,14 @@ export function initLendReturn(view) {
         if (lendingIdInput) {
             lendingIdInput.value = getLendKey(target);
         }
-
         if (qtyInput) {
             qtyInput.value = getLendQuantity(target);
         }
-
         if (borrowerInput) {
             borrowerInput.value = target.borrower_id || target.borrower || '';
         }
-
         if (dateInput) {
-            dateInput.value = new Date().toISOString().split('T')[0];
+            dateInput.value = toDateInputValue(new Date());
         }
     } else if (view === 'return-confirm') {
         const display = document.getElementById('return-confirm-view');
@@ -538,8 +546,8 @@ export function initLendReturn(view) {
     }
 
     if (view === 'lend-history') {
-        window.LendReturnController.loadLendHistory();
+        window.LendReturnController.loadLendHistory(1);
     } else if (view === 'return-history') {
-        window.LendReturnController.loadReturnHistory();
+        window.LendReturnController.loadReturnHistory(1);
     }
 }
