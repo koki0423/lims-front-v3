@@ -1,7 +1,7 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
-import { scanStudentIdWithRetry } from "../../js/nfcReader.js";
 import { AppState } from '../../js/app_state.js';
+import { escapeHtml, toLocalDateTimeIso } from '../../js/dom_utils.js';
 
 // =====================================
 // 定数・ヘルパ
@@ -13,6 +13,10 @@ const regState = {
     data: {},       // step1,2 で入力された値
     submitting: false,
 };
+
+async function loadNfcReader() {
+    return import('../../js/nfcReader.js');
+}
 
 // -------------------------------------
 // GENRE 関連ヘルパ
@@ -87,7 +91,7 @@ function buildPayloadsFromState() {
         asset: {
             serial: regState.type === 'individual' ? (d.serial || null) : null,
             quantity: regState.type === 'bulk' ? Number(d.quantity || 1) : 1,
-            purchased_at: d.purchaseDate ? new Date(d.purchaseDate).toISOString() : new Date().toISOString(),
+            purchased_at: d.purchaseDate ? toLocalDateTimeIso(d.purchaseDate) : toLocalDateTimeIso(new Date()),
             status_id: 1, // 新規登録時は「正常」
             owner: d.registrant || null,
             default_location: d.location || null,
@@ -214,6 +218,7 @@ window.RegController = {
     async NfcRead() {
         const input = document.querySelector('input[name="registrant"]');
         try {
+            const { scanStudentIdWithRetry } = await loadNfcReader();
             const result = await scanStudentIdWithRetry(9, 2000);
             input.value = result.ok ? result.studentId : "error";
         } catch (err) {
@@ -478,8 +483,9 @@ function updateInputVisibility() {
 // =====================================
 // Router から呼ばれる初期化フック
 // =====================================
-export function initRegistration(step) {
+export async function initRegistration(step) {
     if (step === 'step1') {
+        await AppState.ensureMasterData();
         renderGenreOptions();
         updateInputVisibility();
         const form = document.getElementById('form-reg-1');
@@ -565,18 +571,18 @@ function renderConfirm() {
     const halfcutOn = d.labelHalfcut === 'on';
 
     display.innerHTML = `
-        <div class="info-row"><span class="info-label">管理方法</span><span>${typeLabel}</span></div>
-        <div class="info-row"><span class="info-label">備品名</span><span>${d.itemName || ''}</span></div>
-        <div class="info-row"><span class="info-label">メーカー</span><span>${d.maker || ''}</span></div>
-        <div class="info-row"><span class="info-label">型番</span><span>${d.model || '-'}</span></div>
-        <div class="info-row"><span class="info-label">シリアル</span><span>${d.serial || '-'}</span></div>
-        <div class="info-row"><span class="info-label">ジャンル</span><span>${d.genre || ''}</span></div>
-        <div class="info-row"><span class="info-label">保管場所</span><span>${d.location || ''}</span></div>
-        <div class="info-row"><span class="info-label">購入日</span><span>${d.purchaseDate || ''}</span></div>
-        <div class="info-row"><span class="info-label">登録者</span><span>${d.registrant || ''}</span></div>
-        <div class="info-row"><span class="info-label">備考</span><span>${d.remarks || ''}</span></div>
-        <div class="info-row"><span class="info-label">ラベル種別</span><span>${codeTypeLabel}</span></div>
-        <div class="info-row"><span class="info-label">テープ幅</span><span>${tapeWidth} mm</span></div>
-        <div class="info-row"><span class="info-label">ハーフカット</span><span>${halfcutOn ? 'あり' : 'なし'}</span></div>
+        <div class="info-row"><span class="info-label">管理方法</span><span>${escapeHtml(typeLabel)}</span></div>
+        <div class="info-row"><span class="info-label">備品名</span><span>${escapeHtml(d.itemName || '')}</span></div>
+        <div class="info-row"><span class="info-label">メーカー</span><span>${escapeHtml(d.maker || '')}</span></div>
+        <div class="info-row"><span class="info-label">型番</span><span>${escapeHtml(d.model || '-')}</span></div>
+        <div class="info-row"><span class="info-label">シリアル</span><span>${escapeHtml(d.serial || '-')}</span></div>
+        <div class="info-row"><span class="info-label">ジャンル</span><span>${escapeHtml(d.genre || '')}</span></div>
+        <div class="info-row"><span class="info-label">保管場所</span><span>${escapeHtml(d.location || '')}</span></div>
+        <div class="info-row"><span class="info-label">購入日</span><span>${escapeHtml(d.purchaseDate || '')}</span></div>
+        <div class="info-row"><span class="info-label">登録者</span><span>${escapeHtml(d.registrant || '')}</span></div>
+        <div class="info-row"><span class="info-label">備考</span><span>${escapeHtml(d.remarks || '')}</span></div>
+        <div class="info-row"><span class="info-label">ラベル種別</span><span>${escapeHtml(codeTypeLabel)}</span></div>
+        <div class="info-row"><span class="info-label">テープ幅</span><span>${escapeHtml(tapeWidth)} mm</span></div>
+        <div class="info-row"><span class="info-label">ハーフカット</span><span>${escapeHtml(halfcutOn ? 'あり' : 'なし')}</span></div>
     `;
 }

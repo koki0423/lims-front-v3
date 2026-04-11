@@ -1,6 +1,7 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
+import { escapeHtml } from '../../js/dom_utils.js';
 
 // === 定数定義 ===
 // ステータス定義 (ID -> 表示名)
@@ -25,7 +26,7 @@ const searchState = {
 
 // === ヘルパー関数 ===
 function genreById(id) {
-    return AppState.genres.find(g => g.id === Number(id)) || null;
+    return AppState.getGenreById(id, { all: true });
 }
 
 function getStatusName(id) {
@@ -100,6 +101,8 @@ window.SearchController = {
                 alert('該当する備品は見つかりませんでした');
                 return;
             }
+
+            await AppState.loadGenres({ all: true });
 
             // === 分岐ロジック ===
             if (results.length === 1) {
@@ -383,12 +386,12 @@ export function initSearchList() {
 
         return `
             <tr>
-                <td style="padding: 12px 5px;">${mgmtNum}</td>
-                <td style="padding: 12px 5px;">${m.name || '-'}</td>
+                <td style="padding: 12px 5px;">${escapeHtml(mgmtNum)}</td>
+                <td style="padding: 12px 5px;">${escapeHtml(m.name || '-')}</td>
                 <td style="padding: 12px 5px;">
                     <span class="status-badge ${statusInfo.class}">${statusInfo.name}</span>
                 </td>
-                <td style="padding: 12px 5px;">${location}</td>
+                <td style="padding: 12px 5px;">${escapeHtml(location)}</td>
                 <td style="text-align: center; padding: 12px 5px;">
                     <button class="sm-btn" onclick="SearchController.selectCandidate(${index})">
                         詳細

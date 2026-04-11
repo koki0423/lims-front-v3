@@ -111,8 +111,8 @@ export const API = {
     // 廃棄
     disposal: {
         register: (management_number, data) => client.post(`/api/v2/assets/${encodeURIComponent(management_number)}/disposals`, data),
-        lookup: (mgmtCode) => client.get(`/api/v2/assets/mgmt/${encodeURIComponent(mgmtCode)}`, mgmtCode),// クエリ方式の場合: client.get('/api/v1/disposal', { params: { id: mgmtCode } })
-        fetchHistory: () => client.get('/api/v2/disposals'),
+        lookup: (mgmtCode) => client.get(`/api/v2/assets/mgmt/${encodeURIComponent(mgmtCode)}`),
+        fetchHistory: (params) => client.get('/api/v2/disposals', { params }),
     },
 
     // 管理者・認証

@@ -1,33 +1,40 @@
 import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
-import { scanStudentIdWithRetry } from "../../js/nfcReader.js";
-import {setAdminToken, clearAdminToken, getAdminToken } from '../../js/token.js';
+import { escapeHtml } from '../../js/dom_utils.js';
+import { setAdminToken, clearAdminToken } from '../../js/token.js';
+
+const adminState = {
+    genres: []
+};
+
+async function loadNfcReader() {
+    return import('../../js/nfcReader.js');
+}
 
 window.AdminController = {
     // ===============================================
     // ログイン・管理者登録関連
     // ===============================================
-
-    // NFCボタン
     async NfcRead() {
         const input = document.getElementById('admin-id');
+
         try {
+            const { scanStudentIdWithRetry } = await loadNfcReader();
             const result = await scanStudentIdWithRetry(9, 2000);
+
             if (result.ok) {
-                console.log("OK:", result.studentId);
                 input.value = result.studentId;
-            } else {
-                console.log("NG:", result.error);
-                input.value = "error";
+                return;
             }
+
+            input.value = "error";
         } catch (err) {
             console.error("scan error:", err);
             if (input) input.value = "error";
         }
     },
 
-    // ログイン判定
     async login() {
         const id = document.getElementById('admin-id').value;
         const pass = document.getElementById('admin-pass').value;
@@ -35,37 +42,34 @@ window.AdminController = {
         if (errorMsg) errorMsg.textContent = '';
 
         try {
-            const data = await API.admin.login({ id: id, password: pass });
+            const data = await API.admin.login({ id, password: pass });
             if (!data || !data.token) {
                 if (errorMsg) errorMsg.textContent = 'ログイン応答が不正です';
                 return;
             }
+
             setAdminToken(data.token);
             Router.to('admin-main');
-        } catch (e) {
+        } catch (error) {
             if (errorMsg) errorMsg.textContent = 'ログインに失敗しました。';
         }
     },
 
-
-    // ログアウト処理
     logout() {
         clearAdminToken();
         alert('ログアウトしました');
         Router.to('main-menu');
     },
 
-
-    // 追加登録画面へ遷移
     toRegister() {
         Router.to('admin-register');
     },
 
-    // 管理者追加登録実行
     async submitRegister() {
         const form = document.getElementById('form-admin-reg');
         const errorMsg = document.getElementById('register-error-msg');
         if (errorMsg) errorMsg.textContent = '';
+
         if (!form.reportValidity()) {
             if (errorMsg) {
                 errorMsg.textContent = '入力に不備があります。必須項目を入力してください。';
@@ -80,11 +84,12 @@ window.AdminController = {
             await API.admin.register({ id, password, role: "admin" });
             alert('管理者を追加登録しました');
             Router.to('admin-main');
-        } catch (e) {
-            if (e?.response?.status === 409) {
+        } catch (error) {
+            if (error?.response?.status === 409) {
                 if (errorMsg) errorMsg.textContent = 'そのIDは既に存在します';
                 return;
             }
+
             if (errorMsg) errorMsg.textContent = '登録失敗';
         }
     },
@@ -97,69 +102,66 @@ window.AdminController = {
         Router.to('admin-main');
     },
 
-
     // ===============================================
     // 備品ジャンル管理
     // ===============================================
-
     async initGenreMaster() {
-        this.renderGenreList();
+        await this.renderGenreList();
     },
 
     async renderGenreList() {
         try {
-            // 管理画面なので全件取得 (?all=true)
-            const genres = await API.genres.list(true);
-            const tbody = document.getElementById('genre-list-body');
-            if (!tbody) return; // 画面遷移タイミングによっては無い場合があるのでガード
+            const genres = await AppState.loadGenres({ all: true, force: true });
+            adminState.genres = genres;
 
-            tbody.innerHTML = genres.map(g => {
-                const disabledStyle = g.is_disabled ? 'background:#eee; color:#999;' : '';
-                const statusText = g.is_disabled ? '無効' : '有効';
-                const btnText = g.is_disabled ? '有効化' : '無効化';
-                const nextState = !g.is_disabled;
+            const tbody = document.getElementById('genre-list-body');
+            if (!tbody) return;
+
+            tbody.innerHTML = genres.map((genre, index) => {
+                const disabledStyle = genre.is_disabled ? 'background:#eee; color:#999;' : '';
+                const statusText = genre.is_disabled ? '無効' : '有効';
+                const btnText = genre.is_disabled ? '有効化' : '無効化';
 
                 return `
-                <tr style="${disabledStyle}">
-                <td>${g.id}</td>
-                <td>${g.name}</td>
-                <td>${g.code}</td>
-                <td>${statusText}</td>
-                <td>
-                    <button class="sm-btn"
-                    data-id="${g.id}"
-                    data-next="${nextState}"
-                    data-name="${g.name}"
-                    data-code="${g.code}"
-                    onclick="AdminController.toggleGenreFromBtn(this)">
-                    ${btnText}
-                    </button>
-                </td>
-                </tr>
+                    <tr style="${disabledStyle}">
+                        <td>${escapeHtml(genre.id)}</td>
+                        <td>${escapeHtml(genre.name)}</td>
+                        <td>${escapeHtml(genre.code)}</td>
+                        <td>${statusText}</td>
+                        <td>
+                            <button class="sm-btn" onclick="AdminController.toggleGenreByIndex(${index})">
+                                ${btnText}
+                            </button>
+                        </td>
+                    </tr>
                 `;
             }).join('');
-        }
-        catch (e) {
-            console.error(e);
+        } catch (error) {
+            console.error(error);
             alert('ジャンル一覧の取得に失敗しました');
         }
     },
 
     async addGenre() {
-        const name = document.getElementById('new-genre-name').value;
-        const code = document.getElementById('new-genre-code').value;
-        if (!name || !code) return alert('入力してください');
+        const name = document.getElementById('new-genre-name').value.trim();
+        const code = document.getElementById('new-genre-code').value.trim();
+
+        if (!name || !code) {
+            alert('入力してください');
+            return;
+        }
 
         try {
             await API.genres.create({ name, code });
             alert('追加しました');
 
-            await AppState.initMasterData(); // マスタ再読み込み
-            this.renderGenreList();
+            await AppState.refreshGenres();
+            await this.renderGenreList();
 
             document.getElementById('new-genre-name').value = '';
             document.getElementById('new-genre-code').value = '';
-        } catch (e) {
+        } catch (error) {
+            console.error(error);
             alert('追加失敗');
         }
     },
@@ -170,23 +172,25 @@ window.AdminController = {
 
         try {
             await API.genres.update(id, {
-                name: name,
-                code: code,
+                name,
+                code,
                 is_disabled: nextIsDisabledState
             });
 
-            await AppState.initMasterData();
-            this.renderGenreList();
-        } catch (e) {
-            alert('更新失敗: ' + e.message);
+            await AppState.refreshGenres();
+            await this.renderGenreList();
+        } catch (error) {
+            alert('更新失敗: ' + error.message);
         }
     },
 
-    async toggleGenreFromBtn(btn) {
-        const id = Number(btn.dataset.id);
-        const next = btn.dataset.next === "true";
-        const name = btn.dataset.name || "";
-        const code = btn.dataset.code || "";
-        return this.toggleGenre(id, next, name, code);
+    async toggleGenreByIndex(index) {
+        const genre = adminState.genres[index];
+        if (!genre) {
+            alert('対象ジャンルが見つかりません');
+            return;
+        }
+
+        await this.toggleGenre(genre.id, !genre.is_disabled, genre.name, genre.code);
     }
 };
