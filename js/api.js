@@ -59,6 +59,9 @@ export const API = {
             }
         }),
 
+        // ラベルテンプレートダウンロード
+        downloadTemplate: (width,type) => client.get(`/api/v2/assets/print/template?width=${width}&type=${type}`, { responseType: 'blob' }),
+
         // ラベル印刷
         printLabel: (payload) => client.post('/api/v2/assets/print', payload),
 
@@ -98,7 +101,6 @@ export const API = {
         print: (data) => client.post('/api/v2/assets/print', data),
     },
 
-    // 貸出・返却
     // 貸出・返却
     lending: {
         register: (payload) => client.post('/api/v2/lends', payload),
