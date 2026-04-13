@@ -89,6 +89,139 @@ async function loadItemPage(page = 1) {
     }
 }
 
+async function downloadTemplateFile(width, type) {
+    try {
+        const blob = await API.assets.downloadTemplate(width, type);
+        const filename = width + '_' + type + '.lw1';
+        return new File([blob], filename, { type: 'application/octet-stream' });
+    } catch (error) {
+        const message =
+            error.response?.data?.error?.message ||
+            error.message ||
+            'テンプレートの取得に失敗しました';
+
+        throw new Error(message);
+    }
+}
+
+function escapeCsvValue(value) {
+    const s = value == null ? '' : String(value);
+    if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+}
+
+function buildCsvFileFromLabels(labels) {
+    const lines = [];
+
+    for (const row of labels) {
+        if (!row || row.checked !== true) {
+            continue;
+        }
+
+        const cols = [
+            escapeCsvValue(row.col_b),
+            escapeCsvValue(row.col_c),
+            escapeCsvValue(row.col_d),
+            escapeCsvValue(row.col_e)
+        ];
+
+        lines.push(cols.join(','));
+    }
+
+    const csvText = lines.join('\r\n');
+    const bom = '\uFEFF';
+    return new File([bom, csvText], 'labels.csv', { type: 'text/csv;charset=utf-8' });
+}
+
+function getTapeIdFromWidth(width) {
+    const w = Number(width);
+
+    switch (w) {
+        case 4:
+            return window.TepraPrintTapeID._04MMTAPE;
+        case 6:
+            return window.TepraPrintTapeID._06MMTAPE;
+        case 9:
+            return window.TepraPrintTapeID._09MMTAPE;
+        case 12:
+            return window.TepraPrintTapeID._12MMTAPE;
+        case 18:
+            return window.TepraPrintTapeID._18MMTAPE;
+        case 24:
+            return window.TepraPrintTapeID._24MMTAPE;
+        case 36:
+            return window.TepraPrintTapeID._36MMTAPE;
+        default:
+            throw new Error('未対応のテープ幅です: ' + width);
+    }
+}
+
+async function printLabelsWithTepra(labels, width, type, halfcut) {
+    if (!window.TepraPrint || !window.TepraPrintError) {
+        throw new Error('TepraPrintライブラリが読み込まれていません');
+    }
+
+    const templateFile = await downloadTemplateFile(width, type);
+    const csvFile = buildCsvFileFromLabels(labels);
+
+    const printerResult = await window.TepraPrint.createPrinter();
+    if (printerResult.errorCode !== window.TepraPrintError.SUCCESS) {
+        throw new Error('プリンタの取得に失敗しました: errorCode=' + printerResult.errorCode);
+    }
+
+    const printer = printerResult.printer;
+
+    const onlineResult = await window.TepraPrint.checkPrinterOnline(printer.printerName);
+    if (onlineResult.errorCode !== window.TepraPrintError.SUCCESS) {
+        throw new Error('プリンタ状態の確認に失敗しました: errorCode=' + onlineResult.errorCode);
+    }
+    if (!onlineResult.isOnline) {
+        throw new Error('テプラプリンタがオフラインです');
+    }
+
+    const paramResult = await printer.createPrintParameter();
+    if (paramResult.errorCode !== window.TepraPrintError.SUCCESS) {
+        throw new Error('印刷パラメータ生成に失敗しました');
+    }
+
+    const printParameter = paramResult.printParameter;
+    printParameter.tape = getTapeIdFromWidth(width);
+    printParameter.halfCut = Boolean(halfcut);
+    printParameter.tapeCut = window.TepraPrintTapeCut.EACH_LABEL;
+    printParameter.displayTapeWidth = false;
+    printParameter.displayPrintSetting = false;
+    printParameter.displayError = true;
+    printParameter.previewImage = false;
+    printParameter.skipRecord = false;
+
+    const printFile = {
+        templateFile: templateFile,
+        csvFile: csvFile
+    };
+
+    const printResult = await printer.doPrint(printParameter, printFile);
+    if (printResult.errorCode !== window.TepraPrintError.SUCCESS) {
+        throw new Error('印刷開始に失敗しました: errorCode=' + printResult.errorCode);
+    }
+
+    return printResult.printJob;
+}
+
+function buildListLabelRow(masterPayload, managementNumber) {
+    const genre = AppState.getGenreById(masterPayload.genre_id, { all: true });
+    const genreName = genre ? (genre.name ?? genre.genre_name ?? '-') : '-';
+
+    return {
+        checked: true,
+        col_b: masterPayload.name || '',
+        col_c: genreName,
+        col_d: managementNumber || '',
+        col_e: managementNumber || ''
+    };
+}
+
 window.ItemListController = {
     async toggleFilter(status) {
         if (itemListState.currentFilter == status) {
@@ -278,8 +411,16 @@ window.ItemListController = {
         try {
             const data = await API.assets.getPair(managementNumber);
             const master = data.master;
-            const payload = buildListPrintPayload(master, managementNumber, itemListState.label);
-            await API.assets.printLabel(payload);
+
+            const label = buildListLabelRow(master, managementNumber);
+            const type = codeType === 'QR' ? 'qrcode' : 'code128';
+
+            await printLabelsWithTepra(
+                [label],
+                tapeWidth,
+                type,
+                true
+            );
 
             alert('ラベル印刷を実行しました');
             this.closeLabelModal();
