@@ -189,7 +189,290 @@ function buildCsvFileFromLabels(labels) {
     }
 
     const csvText = lines.join('\r\n');
-    return new File([csvText], 'labels.csv', { type: 'text/csv' });
+    const bom = '\uFEFF';
+    return new File([bom, csvText], 'labels.csv', { type: 'text/csv;charset=utf-8' });
+}
+
+function splitCsvLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+
+        if (ch === '"') {
+            if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+                current += '"';
+                i += 1;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+
+        if (ch === ',' && !inQuotes) {
+            result.push(current);
+            current = '';
+            continue;
+        }
+
+        current += ch;
+    }
+
+    result.push(current);
+    return result;
+}
+
+function parseSimpleCsv(text) {
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = normalized.split('\n');
+    const rows = [];
+
+    for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        if (line === '') {
+            continue;
+        }
+        rows.push(splitCsvLine(line));
+    }
+
+    return rows;
+}
+
+function stringifyCsv(rows) {
+    const lines = [];
+
+    for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i];
+        const cols = [];
+
+        for (let j = 0; j < row.length; j += 1) {
+            cols.push(escapeCsvValue(row[j]));
+        }
+
+        lines.push(cols.join(','));
+    }
+
+    return lines.join('\r\n');
+}
+
+function normalizeFullWidthDigits(value) {
+    if (value == null) {
+        return '';
+    }
+
+    return String(value).replace(/[０-９]/g, function (ch) {
+        return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+    });
+}
+
+function cleanCell(value) {
+    if (value == null) {
+        return '';
+    }
+
+    return String(value).trim();
+}
+
+function parseTemplateRows(fileText) {
+    const rows = parseSimpleCsv(fileText);
+    if (rows.length === 0) {
+        throw new Error('CSVが空です');
+    }
+
+    let headerIndex = -1;
+    for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i];
+        const joined = row.join(',');
+        if (joined.includes('備品名') && joined.includes('管理区分')) {
+            headerIndex = i;
+            break;
+        }
+    }
+
+    if (headerIndex < 0) {
+        throw new Error('テンプレートのヘッダ行が見つかりません');
+    }
+
+    const headerRow = rows[headerIndex];
+    const dataRows = [];
+    for (let i = headerIndex + 1; i < rows.length; i += 1) {
+        dataRows.push(rows[i]);
+    }
+
+    return {
+        headerRow,
+        dataRows
+    };
+}
+
+function findHeaderIndexMap(headerRow) {
+    const indexMap = {};
+
+    for (let i = 0; i < headerRow.length; i += 1) {
+        const key = cleanCell(headerRow[i]);
+        if (key !== '') {
+            indexMap[key] = i;
+        }
+    }
+
+    return indexMap;
+}
+
+function getCellByHeader(row, indexMap, headerName) {
+    const idx = indexMap[headerName];
+    if (idx == null) {
+        return '';
+    }
+    return cleanCell(row[idx]);
+}
+
+function toImportRfc3339(value) {
+    const v = normalizeFullWidthDigits(cleanCell(value));
+    if (v === '') {
+        throw new Error('購入日が空です');
+    }
+
+    const m = v.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+    if (!m) {
+        throw new Error('購入日の形式が不正です: ' + value);
+    }
+
+    const year = m[1];
+    const month = m[2].padStart(2, '0');
+    const day = m[3].padStart(2, '0');
+
+    return year + '-' + month + '-' + day + 'T00:00:00+09:00';
+}
+
+function managementCategoryLabelToId(value) {
+    const v = cleanCell(value);
+
+    if (v === '個別管理') {
+        return '1';
+    }
+    if (v === '一括管理') {
+        return '2';
+    }
+
+    throw new Error('管理区分が不正です: ' + value);
+}
+
+function resolveGenreIdByName(name) {
+    const genreName = cleanCell(name);
+    const genre = genreByName(genreName);
+
+    if (!genre) {
+        throw new Error('備品ジャンルが不正です: ' + name);
+    }
+
+    return String(genre.id);
+}
+
+function toPositiveIntegerString(value, fallbackValue) {
+    const raw = normalizeFullWidthDigits(cleanCell(value));
+    if (raw === '') {
+        return String(fallbackValue);
+    }
+
+    const num = Number(raw);
+    if (!Number.isInteger(num) || num < 0) {
+        throw new Error('個数が不正です: ' + value);
+    }
+
+    return String(num);
+}
+
+async function buildImportCsvFromTemplateFile(file) {
+    await AppState.ensureMasterData();
+
+    const text = await file.text();
+    const parsed = parseTemplateRows(text);
+    const headerRow = parsed.headerRow;
+    const dataRows = parsed.dataRows;
+    const indexMap = findHeaderIndexMap(headerRow);
+
+    const outputRows = [];
+    outputRows.push([
+        'name',
+        'management_category_id',
+        'genre_id',
+        'manufacturer',
+        'model',
+        'serial',
+        'quantity',
+        'purchased_at',
+        'status_id',
+        'owner',
+        'default_location',
+        'location',
+        'last_checked_at',
+        'last_checked_by',
+        'notes'
+    ]);
+
+    for (let i = 0; i < dataRows.length; i += 1) {
+        const row = dataRows[i];
+
+        const name = getCellByHeader(row, indexMap, '備品名');
+        const managementCategory = getCellByHeader(row, indexMap, '管理区分');
+        const manufacturer = getCellByHeader(row, indexMap, 'メーカー');
+        const model = getCellByHeader(row, indexMap, '型番');
+        const serial = getCellByHeader(row, indexMap, 'シリアル番号');
+        const quantity = getCellByHeader(row, indexMap, '個数');
+        const ownerOrLocation = getCellByHeader(row, indexMap, '保管場所（所有者）');
+        const genreName = getCellByHeader(row, indexMap, '備品ジャンル');
+        const purchasedAt = getCellByHeader(row, indexMap, '購入日(yyyy/mm/dd)');
+        const notes = getCellByHeader(row, indexMap, '備考');
+
+        const isEmptyRow =
+            name === '' &&
+            managementCategory === '' &&
+            manufacturer === '' &&
+            model === '' &&
+            serial === '' &&
+            quantity === '' &&
+            ownerOrLocation === '' &&
+            genreName === '' &&
+            purchasedAt === '' &&
+            notes === '';
+
+        if (isEmptyRow) {
+            continue;
+        }
+
+        const managementCategoryId = managementCategoryLabelToId(managementCategory);
+        const genreId = resolveGenreIdByName(genreName);
+        const quantityValue = toPositiveIntegerString(quantity, 1);
+        const purchasedAtValue = toImportRfc3339(purchasedAt);
+
+        outputRows.push([
+            name,
+            managementCategoryId,
+            genreId,
+            manufacturer,
+            model,
+            serial,
+            quantityValue,
+            purchasedAtValue,
+            '1',
+            ownerOrLocation,
+            ownerOrLocation,
+            '',
+            '',
+            '',
+            notes
+        ]);
+    }
+
+    if (outputRows.length === 1) {
+        throw new Error('登録対象のデータ行がありません');
+    }
+
+    const csvText = stringifyCsv(outputRows);
+
+    return new File([csvText], 'assets_import.csv', { type: 'text/csv;charset=utf-8' });
 }
 
 // =====================================
@@ -472,11 +755,13 @@ window.RegController = {
                 alert(`登録完了、印刷を開始しました。\n管理番号: ${result.managementNumber}`);
             }
 
-            // リセット＆完了画面へ
             regState.data = {};
             regState.type = '';
+
             if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
                 CommonController.showComplete('新規登録が完了しました');
+            } else {
+                Router.to('complete');
             }
         } catch (e) {
             console.error('登録エラー:', e);
@@ -489,12 +774,26 @@ window.RegController = {
 
     // 一括登録用のテンプレートダウンロード
     downloadBatchTemplate() {
-        const link = document.createElement('a');
-        link.href = '/assets/templates/batch_register_template.xlsx';
-        link.download = '一括登録テンプレート.xlsx';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const files = [
+            {
+                href: '/assets/templates/batch_register_guide.xlsx',
+                download: '一括登録説明書.xlsx'
+            },
+            {
+                href: '/assets/templates/batch_register_template.csv',
+                download: '一括登録テンプレート.csv'
+            }
+        ];
+
+        for (let i = 0; i < files.length; i += 1) {
+            const file = files[i];
+            const link = document.createElement('a');
+            link.href = file.href;
+            link.download = file.download;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     },
 
     // 一括登録用 CSVアップロード処理
@@ -508,16 +807,30 @@ window.RegController = {
             alert('ファイルを選択してください');
             return;
         }
-        const file = fileInput.files[0];
+
+        const originalFile = fileInput.files[0];
+
+        let importFile;
+        try {
+            importFile = await buildImportCsvFromTemplateFile(originalFile);
+        } catch (error) {
+            console.error('CSV変換エラー:', error);
+            alert('CSVの変換に失敗しました: ' + (error.message || 'テンプレート内容を確認してください'));
+            return;
+        }
+
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', importFile);
 
         let response;
         try {
             response = await API.assets.batchRegister('commit', formData);
         } catch (error) {
             console.error(error);
-            const msg = error.response?.data?.error || error.message;
+            const msg =
+                error.response?.data?.error?.message ||
+                error.response?.data?.error ||
+                error.message;
             alert('一括登録に失敗しました: ' + msg);
             return;
         }
@@ -530,6 +843,7 @@ window.RegController = {
             halfcut,
         };
         batchImportState.results = Array.isArray(response?.results) ? response.results : [];
+        console.log('sending converted file:', importFile);
 
         try {
             await this.printImportedLabels();
@@ -737,8 +1051,7 @@ export async function initRegistration(step) {
 
             janInput.focus();
         }, 100);
-    }
-    if (step === 'step2') {
+    } else if (step === 'step2') {
         const form = document.getElementById('form-reg-1');
         if (form) restoreFormData(form, regState.data);
     } else if (step === 'step3') {

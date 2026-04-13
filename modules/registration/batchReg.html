@@ -1,21 +1,20 @@
 <div class="screen-content">
     <h2>新規登録 > 管理方法選択 > 一括登録</h2>
     <div class="form-group">
-        <label>CSVファイルを選択</label>
-
         <div style="margin-bottom: 10px;">
             <button type="button" class="secondary-btn" onclick="RegController.downloadBatchTemplate()">
                 テンプレートをダウンロード
             </button>
         </div>
-
+        <div style="margin-top: 8px; font-size: 0.9em; color: #666;">
+            説明書はExcel形式、入力用テンプレートはCSV形式でダウンロードされます。CSVに入力してそのままアップロードしてください。
+        </div>
+        <label>CSVファイルを選択</label>
         <div class="input-file">
             <input type="file" id="file-csv" name="file-csv" accept=".csv" />
         </div>
 
-        <div style="margin-top: 8px; font-size: 0.9em; color: #666;">
-            テンプレートはExcel形式です。入力後、CSV形式で保存してアップロードしてください。
-        </div>
+
     </div>
     <div class="form-group">
         <label>ラベル設定</label>
