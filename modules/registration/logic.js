@@ -19,6 +19,10 @@ const batchImportState = {
     results: null,
 };
 
+async function loadNfcReader() {
+    return import('../../js/nfcReader.js');
+}
+
 // -------------------------------------
 // GENRE 関連ヘルパ
 // -------------------------------------
