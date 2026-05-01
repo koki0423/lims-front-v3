@@ -27,6 +27,9 @@ const returnState = {
     }
 };
 
+let isSubmittingLend = false;
+let isSubmittingReturn = false;
+
 async function loadNfcReader() {
     return import('../../js/nfcReader.js');
 }
@@ -280,6 +283,12 @@ window.LendReturnController = {
     },
 
     async submitLend() {
+        if (isSubmittingLend) {
+            return;
+        }
+
+        isSubmittingLend = true;
+
         try {
             const payload = {
                 management_number: lendState.data.itemId,
@@ -289,12 +298,18 @@ window.LendReturnController = {
                 lent_by_id: lendState.data.lender ? lendState.data.lender : null
             };
 
+            console.log('submit lend payload:', payload);
+
             await API.lending.register(payload);
+
             lendState.data = {};
-            CommonController.showComplete('貸出登録が完了しました');
+            alert('貸出登録が完了しました');
+            Router.to('lend-input');
         } catch (error) {
             console.error('submitLend error:', error);
             showApiError(error, '貸出登録に失敗しました');
+        } finally {
+            isSubmittingLend = false;
         }
     },
 
@@ -393,6 +408,10 @@ window.LendReturnController = {
     },
 
     async submitReturn() {
+        if (isSubmittingReturn) {
+            return;
+        }
+
         if (!returnState.targetLending) {
             alert('返却対象がありません');
             return;
@@ -404,6 +423,8 @@ window.LendReturnController = {
             return;
         }
 
+        isSubmittingReturn = true;
+
         try {
             const payload = {
                 quantity: Number(returnState.inputData.returnQty || getLendQuantity(returnState.targetLending) || 1),
@@ -411,14 +432,21 @@ window.LendReturnController = {
                 note: returnState.inputData.note ? returnState.inputData.note : null
             };
 
+            console.log('submit return payload:', payload);
+
             await API.lending.returnAsset(lendKey, payload);
+
             returnState.targetLending = null;
             returnState.searchResults = [];
             returnState.inputData = {};
-            CommonController.showComplete('返却処理が完了しました');
+
+            alert('返却処理が完了しました');
+            Router.to('return-search');
         } catch (error) {
             console.error('submitReturn error:', error);
             showApiError(error, '返却処理に失敗しました');
+        } finally {
+            isSubmittingReturn = false;
         }
     },
 
