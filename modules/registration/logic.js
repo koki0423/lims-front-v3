@@ -14,9 +14,96 @@ const regState = {
     submitting: false,
 };
 
+const BATCH_PREVIEW_DEFAULT_MESSAGE = 'CSVを選択して「プレビューを作成」を押してください。';
+const SIMPLE_INPUT_DEFAULT_MESSAGE = '共通項目と明細を入力して「プレビューを作成」を押してください。';
+const TABLE_INPUT_DEFAULT_MESSAGE = '表に入力して「プレビューを作成」を押してください。';
+
+const BATCH_TEMPLATE_FIELDS = [
+    { key: 'name', label: '備品名' },
+    { key: 'managementType', label: '管理区分' },
+    { key: 'manufacturer', label: 'メーカー' },
+    { key: 'modelNumber', label: '型番' },
+    { key: 'serialNumber', label: 'シリアル番号' },
+    { key: 'quantity', label: '個数' },
+    { key: 'storageLocation', label: '保管場所（所有者）' },
+    { key: 'genre', label: '備品ジャンル' },
+    { key: 'purchaseDate', label: '購入日' },
+    { key: 'note', label: '備考' },
+];
+
 const batchImportState = {
+    sourceFileName: '',
+    rows: [],
+    validation: null,
+    importFile: null,
+    statusMessage: BATCH_PREVIEW_DEFAULT_MESSAGE,
+    statusTone: 'info',
     printConfig: null,
     results: null,
+    committing: false,
+};
+
+let simpleDetailRowSequence = 1;
+let tableRowSequence = 1;
+
+function createDefaultSimpleCommonFields() {
+    return {
+        managementType: 'individual',
+        manufacturer: '',
+        modelNumber: '',
+        storageLocation: '',
+        genre: '',
+        purchaseDate: ''
+    };
+}
+
+function createSimpleDetailRow() {
+    return {
+        id: simpleDetailRowSequence++,
+        name: '',
+        serialNumber: '',
+        quantity: '',
+        note: ''
+    };
+}
+
+const simpleBatchState = {
+    common: createDefaultSimpleCommonFields(),
+    rows: [createSimpleDetailRow()],
+    validation: null,
+    importFile: null,
+    statusMessage: SIMPLE_INPUT_DEFAULT_MESSAGE,
+    statusTone: 'info',
+    printConfig: null,
+    results: null,
+    committing: false,
+};
+
+function createDefaultTableRow() {
+    return {
+        id: tableRowSequence++,
+        name: '',
+        managementType: '個別管理',
+        manufacturer: '',
+        modelNumber: '',
+        serialNumber: '',
+        quantity: '',
+        storageLocation: '',
+        genre: '',
+        purchaseDate: '',
+        note: ''
+    };
+}
+
+const tableBatchState = {
+    rows: [createDefaultTableRow()],
+    validation: null,
+    importFile: null,
+    statusMessage: TABLE_INPUT_DEFAULT_MESSAGE,
+    statusTone: 'info',
+    printConfig: null,
+    results: null,
+    committing: false,
 };
 
 async function loadNfcReader() {
@@ -62,12 +149,78 @@ function genreById(id) {
     return AppState.genres.find(g => g.id === target) || null;
 }
 
+function clearBatchPreviewState() {
+    batchImportState.sourceFileName = '';
+    batchImportState.rows = [];
+    batchImportState.validation = null;
+    batchImportState.importFile = null;
+}
+
+function setBatchStatus(message, tone = 'info') {
+    batchImportState.statusMessage = message;
+    batchImportState.statusTone = tone;
+}
+
 function clearBatchImportState() {
+    clearBatchPreviewState();
+    setBatchStatus(BATCH_PREVIEW_DEFAULT_MESSAGE, 'info');
     batchImportState.printConfig = null;
     batchImportState.results = null;
+    batchImportState.committing = false;
 
     sessionStorage.removeItem('last_import_print_config');
     sessionStorage.removeItem('last_import_results');
+}
+
+function clearSimplePreviewState() {
+    simpleBatchState.validation = null;
+    simpleBatchState.importFile = null;
+}
+
+function setSimpleBatchStatus(message, tone = 'info') {
+    simpleBatchState.statusMessage = message;
+    simpleBatchState.statusTone = tone;
+}
+
+function clearSimpleBatchState() {
+    simpleDetailRowSequence = 1;
+    simpleBatchState.common = createDefaultSimpleCommonFields();
+    simpleBatchState.rows = [createSimpleDetailRow()];
+    clearSimplePreviewState();
+    setSimpleBatchStatus(SIMPLE_INPUT_DEFAULT_MESSAGE, 'info');
+    simpleBatchState.printConfig = null;
+    simpleBatchState.results = null;
+    simpleBatchState.committing = false;
+}
+
+function markSimpleBatchDirty(message = '入力内容が変更されました。プレビューを更新してください。') {
+    clearSimplePreviewState();
+    setSimpleBatchStatus(message, 'warning');
+}
+
+function clearTableBatchPreviewState() {
+    tableBatchState.validation = null;
+    tableBatchState.importFile = null;
+}
+
+function setTableBatchStatus(message, tone = 'info') {
+    tableBatchState.statusMessage = message;
+    tableBatchState.statusTone = tone;
+}
+
+function clearTableBatchState() {
+    tableRowSequence = 1;
+    tableBatchState.rows = [createDefaultTableRow()];
+    clearTableBatchPreviewState();
+    setTableBatchStatus(TABLE_INPUT_DEFAULT_MESSAGE, 'info');
+    tableBatchState.printConfig = null;
+    tableBatchState.results = null;
+    tableBatchState.committing = false;
+}
+
+function markTableBatchDirty(message = '入力内容が変更されました。プレビューを更新してください。') {
+    clearTableBatchPreviewState();
+    setTableBatchStatus(message, 'warning');
 }
 
 function hasStep1Data() {
@@ -276,7 +429,7 @@ function cleanCell(value) {
         return '';
     }
 
-    return String(value).trim();
+    return String(value).replace(/^\uFEFF/, '').trim();
 }
 
 function parseTemplateRows(fileText) {
@@ -302,7 +455,10 @@ function parseTemplateRows(fileText) {
     const headerRow = rows[headerIndex];
     const dataRows = [];
     for (let i = headerIndex + 1; i < rows.length; i += 1) {
-        dataRows.push(rows[i]);
+        dataRows.push({
+            cells: rows[i],
+            lineNumber: i + 1,
+        });
     }
 
     return {
@@ -332,35 +488,42 @@ function getCellByHeader(row, indexMap, headerName) {
     return cleanCell(row[idx]);
 }
 
-function toImportRfc3339(value) {
+function parsePurchaseDateValue(value) {
     const v = normalizeFullWidthDigits(cleanCell(value));
     if (v === '') {
-        throw new Error('購入日が空です');
+        return { empty: true, value: null, error: null };
     }
 
     const m = v.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
     if (!m) {
-        throw new Error('購入日の形式が不正です: ' + value);
+        return {
+            empty: false,
+            value: null,
+            error: '購入日の形式が不正です。yyyy/mm/dd または yyyy-mm-dd で入力してください。'
+        };
     }
 
     const year = m[1];
     const month = m[2].padStart(2, '0');
     const day = m[3].padStart(2, '0');
 
-    return year + '-' + month + '-' + day + 'T00:00:00+09:00';
+    return {
+        empty: false,
+        value: year + '-' + month + '-' + day + 'T00:00:00+09:00',
+        error: null
+    };
 }
 
-function managementCategoryLabelToId(value) {
+function normalizeBatchManagementType(value) {
     const v = cleanCell(value);
-
     if (v === '個別管理') {
-        return '1';
+        return { key: 'individual', id: '1', label: '個別管理' };
     }
     if (v === '一括管理') {
-        return '2';
+        return { key: 'bulk', id: '2', label: '一括管理' };
     }
 
-    throw new Error('管理区分が不正です: ' + value);
+    return null;
 }
 
 function resolveGenreIdByName(name) {
@@ -368,35 +531,230 @@ function resolveGenreIdByName(name) {
     const genre = genreByName(genreName);
 
     if (!genre) {
-        throw new Error('備品ジャンルが不正です: ' + name);
+        return null;
     }
 
     return String(genre.id);
 }
 
-function toPositiveIntegerString(value, fallbackValue) {
+function parsePositiveInteger(value) {
     const raw = normalizeFullWidthDigits(cleanCell(value));
     if (raw === '') {
-        return String(fallbackValue);
+        return null;
     }
 
     const num = Number(raw);
-    if (!Number.isInteger(num) || num < 0) {
-        throw new Error('個数が不正です: ' + value);
+    if (!Number.isInteger(num) || num < 1) {
+        return null;
     }
 
-    return String(num);
+    return num;
 }
 
-async function buildImportCsvFromTemplateFile(file) {
-    await AppState.ensureMasterData();
+function createBatchIssue(level, field, message) {
+    return { level, field, message };
+}
 
-    const text = await file.text();
-    const parsed = parseTemplateRows(text);
-    const headerRow = parsed.headerRow;
-    const dataRows = parsed.dataRows;
-    const indexMap = findHeaderIndexMap(headerRow);
+function buildBatchIssueMap(issues) {
+    const issueMap = {};
 
+    for (let i = 0; i < issues.length; i += 1) {
+        const issue = issues[i];
+        if (!issueMap[issue.field]) {
+            issueMap[issue.field] = { level: issue.level, messages: [] };
+        }
+
+        issueMap[issue.field].messages.push(issue.message);
+        if (issue.level === 'error') {
+            issueMap[issue.field].level = 'error';
+        }
+    }
+
+    return issueMap;
+}
+
+function buildBatchRowFromTemplateData(dataRow, indexMap) {
+    const cells = dataRow.cells;
+
+    return {
+        sourceLine: dataRow.lineNumber,
+        name: getCellByHeader(cells, indexMap, '備品名'),
+        managementType: getCellByHeader(cells, indexMap, '管理区分'),
+        manufacturer: getCellByHeader(cells, indexMap, 'メーカー'),
+        modelNumber: getCellByHeader(cells, indexMap, '型番'),
+        serialNumber: getCellByHeader(cells, indexMap, 'シリアル番号'),
+        quantity: getCellByHeader(cells, indexMap, '個数'),
+        storageLocation: getCellByHeader(cells, indexMap, '保管場所（所有者）'),
+        genre: getCellByHeader(cells, indexMap, '備品ジャンル'),
+        purchaseDate: getCellByHeader(cells, indexMap, '購入日(yyyy/mm/dd)'),
+        note: getCellByHeader(cells, indexMap, '備考')
+    };
+}
+
+function isEmptyBatchRow(row) {
+    return BATCH_TEMPLATE_FIELDS.every(field => cleanCell(row[field.key]) === '');
+}
+
+function validateBatchRow(row) {
+    const errors = [];
+    const warnings = [];
+    const normalized = {
+        managementTypeKey: null,
+        managementCategoryId: '',
+        genreId: '',
+        quantity: '1',
+        purchasedAt: '',
+        serialKey: ''
+    };
+
+    if (cleanCell(row.name) === '') {
+        errors.push(createBatchIssue('error', 'name', '備品名は必須です。'));
+    }
+
+    const managementType = normalizeBatchManagementType(row.managementType);
+    if (!managementType) {
+        errors.push(createBatchIssue('error', 'managementType', '管理区分は「個別管理」または「一括管理」で入力してください。'));
+    } else {
+        normalized.managementTypeKey = managementType.key;
+        normalized.managementCategoryId = managementType.id;
+    }
+
+    if (cleanCell(row.quantity) === '') {
+        warnings.push(createBatchIssue('warning', 'quantity', '個数が未入力のため 1 として扱います。'));
+    } else {
+        const quantity = parsePositiveInteger(row.quantity);
+        if (quantity == null) {
+            errors.push(createBatchIssue('error', 'quantity', '個数には 1 以上の整数を入力してください。'));
+        } else {
+            normalized.quantity = String(quantity);
+        }
+    }
+
+    if (normalized.managementTypeKey === 'individual' && normalized.quantity !== '1') {
+        errors.push(createBatchIssue('error', 'quantity', '個別管理の個数は 1 で入力してください。'));
+    }
+
+    if (normalized.managementTypeKey === 'individual' && cleanCell(row.serialNumber) === '') {
+        warnings.push(createBatchIssue('warning', 'serialNumber', '個別管理ではシリアル番号の入力を推奨します。'));
+    }
+
+    if (normalized.managementTypeKey === 'bulk' && cleanCell(row.serialNumber) !== '') {
+        warnings.push(createBatchIssue('warning', 'serialNumber', '一括管理ではシリアル番号は通常不要です。'));
+    }
+
+    if (cleanCell(row.genre) === '') {
+        errors.push(createBatchIssue('error', 'genre', '備品ジャンルは必須です。'));
+    } else {
+        const genreId = resolveGenreIdByName(row.genre);
+        if (!genreId) {
+            errors.push(createBatchIssue('error', 'genre', '備品ジャンルが不正です。'));
+        } else {
+            normalized.genreId = genreId;
+        }
+    }
+
+    const parsedPurchaseDate = parsePurchaseDateValue(row.purchaseDate);
+    if (parsedPurchaseDate.empty) {
+        warnings.push(createBatchIssue('warning', 'purchaseDate', '購入日が未入力のため登録日当日を設定します。'));
+        normalized.purchasedAt = toLocalDateTimeIso(new Date());
+    } else if (parsedPurchaseDate.error) {
+        errors.push(createBatchIssue('error', 'purchaseDate', parsedPurchaseDate.error));
+    } else {
+        normalized.purchasedAt = parsedPurchaseDate.value;
+    }
+
+    normalized.serialKey = cleanCell(row.serialNumber).toUpperCase();
+
+    return {
+        row,
+        normalized,
+        errors,
+        warnings,
+        issueMap: buildBatchIssueMap(errors.concat(warnings))
+    };
+}
+
+function applyDuplicateSerialValidation(rowResults) {
+    const duplicates = new Map();
+
+    for (let i = 0; i < rowResults.length; i += 1) {
+        const rowResult = rowResults[i];
+        if (rowResult.normalized.managementTypeKey !== 'individual') {
+            continue;
+        }
+
+        if (!rowResult.normalized.serialKey) {
+            continue;
+        }
+
+        if (!duplicates.has(rowResult.normalized.serialKey)) {
+            duplicates.set(rowResult.normalized.serialKey, []);
+        }
+
+        duplicates.get(rowResult.normalized.serialKey).push(rowResult);
+    }
+
+    duplicates.forEach(items => {
+        if (items.length < 2) {
+            return;
+        }
+
+        for (let i = 0; i < items.length; i += 1) {
+            items[i].errors.push(createBatchIssue('error', 'serialNumber', '個別管理のシリアル番号が重複しています。'));
+            items[i].issueMap = buildBatchIssueMap(items[i].errors.concat(items[i].warnings));
+        }
+    });
+}
+
+function validateBatchRows(rows) {
+    const rowResults = rows.map(validateBatchRow);
+    applyDuplicateSerialValidation(rowResults);
+
+    const summary = {
+        totalRows: rowResults.length,
+        validRowCount: 0,
+        errorRowCount: 0,
+        warningRowCount: 0,
+        individualCount: 0,
+        bulkCount: 0,
+        genreCounts: {}
+    };
+
+    for (let i = 0; i < rowResults.length; i += 1) {
+        const rowResult = rowResults[i];
+
+        if (rowResult.errors.length > 0) {
+            summary.errorRowCount += 1;
+        } else {
+            summary.validRowCount += 1;
+
+            if (rowResult.normalized.managementTypeKey === 'individual') {
+                summary.individualCount += 1;
+            }
+            if (rowResult.normalized.managementTypeKey === 'bulk') {
+                summary.bulkCount += 1;
+            }
+
+            const genreName = cleanCell(rowResult.row.genre);
+            if (genreName !== '') {
+                summary.genreCounts[genreName] = (summary.genreCounts[genreName] || 0) + 1;
+            }
+        }
+
+        if (rowResult.warnings.length > 0) {
+            summary.warningRowCount += 1;
+        }
+    }
+
+    return {
+        rowResults,
+        summary,
+        hasErrors: summary.errorRowCount > 0,
+        hasWarnings: summary.warningRowCount > 0
+    };
+}
+
+function buildImportCsvFromValidatedRows(rowResults) {
     const outputRows = [];
     outputRows.push([
         'name',
@@ -416,67 +774,165 @@ async function buildImportCsvFromTemplateFile(file) {
         'notes'
     ]);
 
-    for (let i = 0; i < dataRows.length; i += 1) {
-        const row = dataRows[i];
-
-        const name = getCellByHeader(row, indexMap, '備品名');
-        const managementCategory = getCellByHeader(row, indexMap, '管理区分');
-        const manufacturer = getCellByHeader(row, indexMap, 'メーカー');
-        const model = getCellByHeader(row, indexMap, '型番');
-        const serial = getCellByHeader(row, indexMap, 'シリアル番号');
-        const quantity = getCellByHeader(row, indexMap, '個数');
-        const ownerOrLocation = getCellByHeader(row, indexMap, '保管場所（所有者）');
-        const genreName = getCellByHeader(row, indexMap, '備品ジャンル');
-        const purchasedAt = getCellByHeader(row, indexMap, '購入日(yyyy/mm/dd)');
-        const notes = getCellByHeader(row, indexMap, '備考');
-
-        const isEmptyRow =
-            name === '' &&
-            managementCategory === '' &&
-            manufacturer === '' &&
-            model === '' &&
-            serial === '' &&
-            quantity === '' &&
-            ownerOrLocation === '' &&
-            genreName === '' &&
-            purchasedAt === '' &&
-            notes === '';
-
-        if (isEmptyRow) {
+    for (let i = 0; i < rowResults.length; i += 1) {
+        const rowResult = rowResults[i];
+        if (rowResult.errors.length > 0) {
             continue;
         }
 
-        const managementCategoryId = managementCategoryLabelToId(managementCategory);
-        const genreId = resolveGenreIdByName(genreName);
-        const quantityValue = toPositiveIntegerString(quantity, 1);
-        const purchasedAtValue = toImportRfc3339(purchasedAt);
+        const row = rowResult.row;
+        const normalized = rowResult.normalized;
 
         outputRows.push([
-            name,
-            managementCategoryId,
-            genreId,
-            manufacturer,
-            model,
-            serial,
-            quantityValue,
-            purchasedAtValue,
+            row.name,
+            normalized.managementCategoryId,
+            normalized.genreId,
+            row.manufacturer,
+            row.modelNumber,
+            row.serialNumber,
+            normalized.quantity,
+            normalized.purchasedAt,
             '1',
-            ownerOrLocation,
-            ownerOrLocation,
+            row.storageLocation,
+            row.storageLocation,
             '',
             '',
             '',
-            notes
+            row.note
         ]);
     }
 
     if (outputRows.length === 1) {
-        throw new Error('登録対象のデータ行がありません');
+        return null;
     }
 
     const csvText = stringifyCsv(outputRows);
 
     return new File([csvText], 'assets_import.csv', { type: 'text/csv;charset=utf-8' });
+}
+
+async function buildBatchImportPreviewFromTemplateFile(file) {
+    await AppState.ensureMasterData();
+
+    const text = await file.text();
+    const parsed = parseTemplateRows(text);
+    const headerRow = parsed.headerRow;
+    const dataRows = parsed.dataRows;
+    const indexMap = findHeaderIndexMap(headerRow);
+
+    const rows = [];
+
+    for (let i = 0; i < dataRows.length; i += 1) {
+        const row = buildBatchRowFromTemplateData(dataRows[i], indexMap);
+        if (isEmptyBatchRow(row)) {
+            continue;
+        }
+        rows.push(row);
+    }
+
+    if (rows.length === 0) {
+        throw new Error('登録対象のデータ行がありません');
+    }
+
+    const validation = validateBatchRows(rows);
+    const importFile = buildImportCsvFromValidatedRows(validation.rowResults);
+
+    return {
+        rows,
+        validation,
+        importFile
+    };
+}
+
+function isSimpleIndividualMode() {
+    return simpleBatchState.common.managementType !== 'bulk';
+}
+
+function getSimpleManagementTypeLabel() {
+    return isSimpleIndividualMode() ? '個別管理' : '一括管理';
+}
+
+function isEmptySimpleDetailRow(row) {
+    if (isSimpleIndividualMode()) {
+        return cleanCell(row.name) === ''
+            && cleanCell(row.serialNumber) === ''
+            && cleanCell(row.note) === '';
+    }
+
+    return cleanCell(row.name) === ''
+        && cleanCell(row.quantity) === ''
+        && cleanCell(row.note) === '';
+}
+
+function buildRowsFromSimpleBatchState() {
+    const rows = [];
+    const managementType = getSimpleManagementTypeLabel();
+
+    for (let i = 0; i < simpleBatchState.rows.length; i += 1) {
+        const detail = simpleBatchState.rows[i];
+        if (isEmptySimpleDetailRow(detail)) {
+            continue;
+        }
+
+        rows.push({
+            sourceLine: i + 1,
+            name: cleanCell(detail.name),
+            managementType,
+            manufacturer: cleanCell(simpleBatchState.common.manufacturer),
+            modelNumber: cleanCell(simpleBatchState.common.modelNumber),
+            serialNumber: isSimpleIndividualMode() ? cleanCell(detail.serialNumber) : '',
+            quantity: isSimpleIndividualMode() ? '1' : cleanCell(detail.quantity),
+            storageLocation: cleanCell(simpleBatchState.common.storageLocation),
+            genre: cleanCell(simpleBatchState.common.genre),
+            purchaseDate: cleanCell(simpleBatchState.common.purchaseDate),
+            note: cleanCell(detail.note)
+        });
+    }
+
+    return rows;
+}
+
+function isEmptyTableBatchRow(row) {
+    const keys = [
+        'name',
+        'manufacturer',
+        'modelNumber',
+        'serialNumber',
+        'quantity',
+        'storageLocation',
+        'genre',
+        'purchaseDate',
+        'note'
+    ];
+
+    return keys.every(key => cleanCell(row[key]) === '');
+}
+
+function buildRowsFromTableBatchState() {
+    const rows = [];
+
+    for (let i = 0; i < tableBatchState.rows.length; i += 1) {
+        const row = tableBatchState.rows[i];
+        if (isEmptyTableBatchRow(row)) {
+            continue;
+        }
+
+        rows.push({
+            sourceLine: i + 1,
+            name: cleanCell(row.name),
+            managementType: cleanCell(row.managementType),
+            manufacturer: cleanCell(row.manufacturer),
+            modelNumber: cleanCell(row.modelNumber),
+            serialNumber: cleanCell(row.serialNumber),
+            quantity: cleanCell(row.quantity),
+            storageLocation: cleanCell(row.storageLocation),
+            genre: cleanCell(row.genre),
+            purchaseDate: cleanCell(row.purchaseDate),
+            note: cleanCell(row.note)
+        });
+    }
+
+    return rows;
 }
 
 // =====================================
@@ -673,6 +1129,524 @@ function buildSingleLabelRow(masterPayload, managementNumber) {
     };
 }
 
+function readBatchLabelSettings() {
+    const labelType = document.getElementById('labelCodeType')?.value || 'QR';
+    const tapeWidth = document.getElementById('labelTapeWidth')?.value || '9';
+    const halfcut = document.getElementById('labelHalfcut')?.checked !== false;
+
+    return {
+        type: labelType,
+        width: tapeWidth,
+        halfcut
+    };
+}
+
+function buildBatchStatusBadge(rowResult) {
+    if (rowResult.errors.length > 0) {
+        return '<span class="status-badge badge-error">エラー</span>';
+    }
+    if (rowResult.warnings.length > 0) {
+        return '<span class="status-badge badge-warn">要確認</span>';
+    }
+    return '<span class="status-badge badge-normal">OK</span>';
+}
+
+function renderBatchIssueGroups(items, title, tone) {
+    if (!items || items.length === 0) {
+        return '';
+    }
+
+    return `
+        <div class="batch-issue-group ${tone}">
+            <div class="batch-issue-title">${escapeHtml(title)}</div>
+            <ul class="batch-message-list">
+                ${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+            </ul>
+        </div>
+    `;
+}
+
+function renderBatchCell(value, issue) {
+    const classes = [];
+    if (issue?.level === 'error') {
+        classes.push('batch-cell-error');
+    } else if (issue?.level === 'warning') {
+        classes.push('batch-cell-warning');
+    }
+
+    const title = issue ? ` title="${escapeHtml(issue.messages.join('\n'))}"` : '';
+    const className = classes.length > 0 ? ` class="${classes.join(' ')}"` : '';
+    const displayValue = cleanCell(value) === ''
+        ? '<span class="batch-empty-value">-</span>'
+        : escapeHtml(value);
+
+    return `<td${className}${title}>${displayValue}</td>`;
+}
+
+function renderBatchIssueSummary(rowResult) {
+    const messages = rowResult.errors.concat(rowResult.warnings)
+        .map(issue => escapeHtml(issue.message));
+
+    if (messages.length === 0) {
+        return '<span class="batch-empty-value">-</span>';
+    }
+
+    return messages.join('<br>');
+}
+
+function renderValidationSummary(validation, sourceLabel) {
+    const summary = validation.summary;
+    const genreSummary = Object.keys(summary.genreCounts)
+        .sort()
+        .map(name => `${name}: ${summary.genreCounts[name]}件`)
+        .join(' / ');
+
+    return `
+        <div class="batch-preview-meta">入力元: ${escapeHtml(sourceLabel || '-')}</div>
+        <div class="batch-summary-grid">
+            <div class="batch-summary-card"><span>読込行数</span><strong>${summary.totalRows}</strong></div>
+            <div class="batch-summary-card"><span>登録可能</span><strong>${summary.validRowCount}</strong></div>
+            <div class="batch-summary-card"><span>エラー行</span><strong>${summary.errorRowCount}</strong></div>
+            <div class="batch-summary-card"><span>警告行</span><strong>${summary.warningRowCount}</strong></div>
+            <div class="batch-summary-card"><span>個別管理</span><strong>${summary.individualCount}</strong></div>
+            <div class="batch-summary-card"><span>一括管理</span><strong>${summary.bulkCount}</strong></div>
+        </div>
+        <div class="batch-preview-meta">ジャンル別: ${escapeHtml(genreSummary || 'なし')}</div>
+    `;
+}
+
+function renderValidationIssues(validation) {
+    const errors = [];
+    const warnings = [];
+
+    for (let i = 0; i < validation.rowResults.length; i += 1) {
+        const rowResult = validation.rowResults[i];
+
+        for (let j = 0; j < rowResult.errors.length; j += 1) {
+            errors.push(`${rowResult.row.sourceLine}行目: ${rowResult.errors[j].message}`);
+        }
+        for (let j = 0; j < rowResult.warnings.length; j += 1) {
+            warnings.push(`${rowResult.row.sourceLine}行目: ${rowResult.warnings[j].message}`);
+        }
+    }
+
+    return [
+        renderBatchIssueGroups(errors, 'エラー', 'error'),
+        renderBatchIssueGroups(warnings, '警告', 'warning')
+    ].join('');
+}
+
+function renderValidationTable(validation) {
+    const head = BATCH_TEMPLATE_FIELDS
+        .map(field => `<th>${escapeHtml(field.label)}</th>`)
+        .join('');
+
+    const body = validation.rowResults.map(rowResult => {
+        const cells = BATCH_TEMPLATE_FIELDS.map(field => {
+            return renderBatchCell(rowResult.row[field.key], rowResult.issueMap[field.key]);
+        }).join('');
+
+        return `
+            <tr>
+                <td>${rowResult.row.sourceLine}</td>
+                <td>${buildBatchStatusBadge(rowResult)}</td>
+                ${cells}
+                <td>${renderBatchIssueSummary(rowResult)}</td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="batch-table-scroll">
+            <table class="data-table batch-preview-table">
+                <thead>
+                    <tr>
+                        <th>行</th>
+                        <th>状態</th>
+                        ${head}
+                        <th>確認事項</th>
+                    </tr>
+                </thead>
+                <tbody>${body}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderBatchImportView() {
+    const statusEl = document.getElementById('batch-preview-status');
+    const summaryEl = document.getElementById('batch-preview-summary');
+    const issuesEl = document.getElementById('batch-preview-issues');
+    const tableEl = document.getElementById('batch-preview-table');
+    const previewBtn = document.getElementById('batch-preview-btn');
+    const resetBtn = document.getElementById('batch-reset-btn');
+    const commitBtn = document.getElementById('batch-commit-btn');
+    const fileInput = document.getElementById('file-csv');
+    const validation = batchImportState.validation;
+    const hasFile = Boolean(fileInput && fileInput.files && fileInput.files.length > 0);
+
+    if (statusEl) {
+        statusEl.innerHTML = `<div class="batch-status-banner ${escapeHtml(batchImportState.statusTone)}">${escapeHtml(batchImportState.statusMessage)}</div>`;
+    }
+
+    if (previewBtn) {
+        previewBtn.disabled = batchImportState.committing;
+        previewBtn.textContent = validation ? 'プレビューを更新' : 'プレビューを作成';
+    }
+
+    if (resetBtn) {
+        resetBtn.disabled = batchImportState.committing || (!hasFile && !validation);
+    }
+
+    if (commitBtn) {
+        const canCommit = Boolean(validation) && !validation.hasErrors && Boolean(batchImportState.importFile) && !batchImportState.committing;
+        commitBtn.disabled = !canCommit;
+        commitBtn.textContent = batchImportState.committing ? '登録中...' : '登録を確定';
+    }
+
+    if (!validation) {
+        if (summaryEl) summaryEl.innerHTML = '';
+        if (issuesEl) issuesEl.innerHTML = '';
+        if (tableEl) tableEl.innerHTML = '';
+        return;
+    }
+
+    if (summaryEl) {
+        summaryEl.innerHTML = renderValidationSummary(validation, batchImportState.sourceFileName || 'CSVファイル');
+    }
+    if (issuesEl) {
+        issuesEl.innerHTML = renderValidationIssues(validation);
+    }
+    if (tableEl) {
+        tableEl.innerHTML = renderValidationTable(validation);
+    }
+}
+
+async function initBatchRegistration() {
+    clearBatchImportState();
+    await AppState.ensureMasterData();
+
+    const fileInput = document.getElementById('file-csv');
+    if (fileInput && fileInput.dataset.batchPreviewBound !== '1') {
+        fileInput.dataset.batchPreviewBound = '1';
+        fileInput.addEventListener('change', function () {
+            clearBatchPreviewState();
+
+            if (fileInput.files && fileInput.files.length > 0) {
+                setBatchStatus('ファイルが変更されました。「プレビューを作成」を押して内容を確認してください。', 'warning');
+            } else {
+                setBatchStatus(BATCH_PREVIEW_DEFAULT_MESSAGE, 'info');
+            }
+
+            renderBatchImportView();
+        });
+    }
+
+    renderBatchImportView();
+}
+
+function buildGenreSelectOptionsHtml(selectedValue) {
+    const options = ['<option value="">選択してください</option>'];
+
+    for (let i = 0; i < AppState.genres.length; i += 1) {
+        const genre = AppState.genres[i];
+        if (genre.is_disabled) {
+            continue;
+        }
+
+        const selected = selectedValue === genre.name ? ' selected' : '';
+        options.push(`<option value="${escapeHtml(genre.name)}"${selected}>${escapeHtml(genre.name)}</option>`);
+    }
+
+    return options.join('');
+}
+
+function renderSimpleDetailRows() {
+    const isIndividual = isSimpleIndividualMode();
+    const detailHeader = isIndividual ? 'シリアル番号' : '個数';
+
+    const body = simpleBatchState.rows.map((row, index) => {
+        const detailField = isIndividual
+            ? `
+                <td>
+                    <input
+                        type="text"
+                        value="${escapeHtml(row.serialNumber)}"
+                        oninput="RegController.updateSimpleRowField(${row.id}, 'serialNumber', this.value)"
+                    />
+                </td>
+            `
+            : `
+                <td>
+                    <input
+                        type="number"
+                        min="1"
+                        value="${escapeHtml(row.quantity)}"
+                        oninput="RegController.updateSimpleRowField(${row.id}, 'quantity', this.value)"
+                    />
+                </td>
+            `;
+
+        return `
+            <tr>
+                <td>${index + 1}</td>
+                <td>
+                    <input
+                        type="text"
+                        value="${escapeHtml(row.name)}"
+                        oninput="RegController.updateSimpleRowField(${row.id}, 'name', this.value)"
+                    />
+                </td>
+                ${detailField}
+                <td>
+                    <input
+                        type="text"
+                        value="${escapeHtml(row.note)}"
+                        oninput="RegController.updateSimpleRowField(${row.id}, 'note', this.value)"
+                    />
+                </td>
+                <td class="batch-row-actions">
+                    <button type="button" class="secondary-btn small-btn" onclick="RegController.duplicateSimpleRow(${row.id})">複製</button>
+                    <button type="button" class="secondary-btn small-btn" onclick="RegController.removeSimpleRow(${row.id})">削除</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="batch-table-scroll">
+            <table class="data-table simple-input-table">
+                <thead>
+                    <tr>
+                        <th>行</th>
+                        <th>備品名</th>
+                        <th>${detailHeader}</th>
+                        <th>備考</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>${body}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderSimpleBatchPreviewView() {
+    const statusEl = document.getElementById('simple-preview-status');
+    const summaryEl = document.getElementById('simple-preview-summary');
+    const issuesEl = document.getElementById('simple-preview-issues');
+    const previewTableEl = document.getElementById('simple-preview-table');
+    const previewBtn = document.getElementById('simple-preview-btn');
+    const resetBtn = document.getElementById('simple-reset-btn');
+    const commitBtn = document.getElementById('simple-commit-btn');
+    const validation = simpleBatchState.validation;
+
+    if (statusEl) {
+        statusEl.innerHTML = `<div class="batch-status-banner ${escapeHtml(simpleBatchState.statusTone)}">${escapeHtml(simpleBatchState.statusMessage)}</div>`;
+    }
+    if (previewBtn) {
+        previewBtn.disabled = simpleBatchState.committing;
+        previewBtn.textContent = validation ? 'プレビューを更新' : 'プレビューを作成';
+    }
+    if (resetBtn) {
+        resetBtn.disabled = simpleBatchState.committing;
+    }
+    if (commitBtn) {
+        const canCommit = Boolean(validation) && !validation.hasErrors && Boolean(simpleBatchState.importFile) && !simpleBatchState.committing;
+        commitBtn.disabled = !canCommit;
+        commitBtn.textContent = simpleBatchState.committing ? '登録中...' : '登録を確定';
+    }
+
+    if (!validation) {
+        if (summaryEl) summaryEl.innerHTML = '';
+        if (issuesEl) issuesEl.innerHTML = '';
+        if (previewTableEl) previewTableEl.innerHTML = '';
+        return;
+    }
+
+    if (summaryEl) {
+        summaryEl.innerHTML = renderValidationSummary(validation, 'かんたん入力');
+    }
+    if (issuesEl) {
+        issuesEl.innerHTML = renderValidationIssues(validation);
+    }
+    if (previewTableEl) {
+        previewTableEl.innerHTML = renderValidationTable(validation);
+    }
+}
+
+function renderSimpleBatchView() {
+    const managementTypeEl = document.getElementById('simple-management-type');
+    const manufacturerEl = document.getElementById('simple-manufacturer');
+    const modelNumberEl = document.getElementById('simple-model-number');
+    const storageLocationEl = document.getElementById('simple-storage-location');
+    const genreEl = document.getElementById('simple-genre');
+    const purchaseDateEl = document.getElementById('simple-purchase-date');
+    const serialToolsEl = document.getElementById('simple-serial-tools');
+    const detailTableEl = document.getElementById('simple-detail-table');
+
+    if (managementTypeEl) {
+        managementTypeEl.value = simpleBatchState.common.managementType;
+    }
+    if (manufacturerEl) {
+        manufacturerEl.value = simpleBatchState.common.manufacturer;
+    }
+    if (modelNumberEl) {
+        modelNumberEl.value = simpleBatchState.common.modelNumber;
+    }
+    if (storageLocationEl) {
+        storageLocationEl.value = simpleBatchState.common.storageLocation;
+    }
+    if (genreEl) {
+        genreEl.innerHTML = buildGenreSelectOptionsHtml(simpleBatchState.common.genre);
+    }
+    if (purchaseDateEl) {
+        purchaseDateEl.value = simpleBatchState.common.purchaseDate;
+    }
+    if (serialToolsEl) {
+        serialToolsEl.style.display = isSimpleIndividualMode() ? 'flex' : 'none';
+    }
+    if (detailTableEl) {
+        detailTableEl.innerHTML = renderSimpleDetailRows();
+    }
+
+    renderSimpleBatchPreviewView();
+}
+
+async function initSimpleBatchRegistration() {
+    clearSimpleBatchState();
+    await AppState.ensureMasterData();
+    renderSimpleBatchView();
+}
+
+function renderTableBatchRows() {
+    const genreOptionsHtml = buildGenreSelectOptionsHtml('');
+
+    const body = tableBatchState.rows.map((row, index) => {
+        const selectedIndividual = row.managementType === '個別管理' ? ' selected' : '';
+        const selectedBulk = row.managementType === '一括管理' ? ' selected' : '';
+        const genreOptions = genreOptionsHtml.replace(
+            `value="${escapeHtml(row.genre)}"`,
+            `value="${escapeHtml(row.genre)}" selected`
+        );
+
+        return `
+            <tr>
+                <td>${index + 1}</td>
+                <td><input type="text" value="${escapeHtml(row.name)}" oninput="RegController.updateTableBatchField(${row.id}, 'name', this.value)" /></td>
+                <td>
+                    <select onchange="RegController.updateTableBatchField(${row.id}, 'managementType', this.value)">
+                        <option value="個別管理"${selectedIndividual}>個別管理</option>
+                        <option value="一括管理"${selectedBulk}>一括管理</option>
+                    </select>
+                </td>
+                <td><input type="text" value="${escapeHtml(row.manufacturer)}" oninput="RegController.updateTableBatchField(${row.id}, 'manufacturer', this.value)" /></td>
+                <td><input type="text" value="${escapeHtml(row.modelNumber)}" oninput="RegController.updateTableBatchField(${row.id}, 'modelNumber', this.value)" /></td>
+                <td><input type="text" value="${escapeHtml(row.serialNumber)}" oninput="RegController.updateTableBatchField(${row.id}, 'serialNumber', this.value)" /></td>
+                <td><input type="number" min="1" value="${escapeHtml(row.quantity)}" oninput="RegController.updateTableBatchField(${row.id}, 'quantity', this.value)" /></td>
+                <td><input type="text" value="${escapeHtml(row.storageLocation)}" oninput="RegController.updateTableBatchField(${row.id}, 'storageLocation', this.value)" /></td>
+                <td>
+                    <select onchange="RegController.updateTableBatchField(${row.id}, 'genre', this.value)">
+                        ${genreOptions}
+                    </select>
+                </td>
+                <td><input type="date" value="${escapeHtml(row.purchaseDate)}" onchange="RegController.updateTableBatchField(${row.id}, 'purchaseDate', this.value)" /></td>
+                <td><input type="text" value="${escapeHtml(row.note)}" oninput="RegController.updateTableBatchField(${row.id}, 'note', this.value)" /></td>
+                <td class="batch-row-actions">
+                    <button type="button" class="secondary-btn small-btn" onclick="RegController.duplicateTableBatchRow(${row.id})">複製</button>
+                    <button type="button" class="secondary-btn small-btn" onclick="RegController.removeTableBatchRow(${row.id})">削除</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="batch-table-scroll">
+            <table class="data-table table-input-table">
+                <thead>
+                    <tr>
+                        <th>行</th>
+                        <th>備品名</th>
+                        <th>管理区分</th>
+                        <th>メーカー</th>
+                        <th>型番</th>
+                        <th>シリアル番号</th>
+                        <th>個数</th>
+                        <th>保管場所（所有者）</th>
+                        <th>備品ジャンル</th>
+                        <th>購入日</th>
+                        <th>備考</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>${body}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderTableBatchPreviewView() {
+    const statusEl = document.getElementById('table-preview-status');
+    const summaryEl = document.getElementById('table-preview-summary');
+    const issuesEl = document.getElementById('table-preview-issues');
+    const previewTableEl = document.getElementById('table-preview-table');
+    const previewBtn = document.getElementById('table-preview-btn');
+    const resetBtn = document.getElementById('table-reset-btn');
+    const commitBtn = document.getElementById('table-commit-btn');
+    const validation = tableBatchState.validation;
+
+    if (statusEl) {
+        statusEl.innerHTML = `<div class="batch-status-banner ${escapeHtml(tableBatchState.statusTone)}">${escapeHtml(tableBatchState.statusMessage)}</div>`;
+    }
+
+    if (previewBtn) {
+        previewBtn.disabled = tableBatchState.committing;
+        previewBtn.textContent = validation ? 'プレビューを更新' : 'プレビューを作成';
+    }
+
+    if (resetBtn) {
+        resetBtn.disabled = tableBatchState.committing;
+    }
+
+    if (commitBtn) {
+        const canCommit = Boolean(validation) && !validation.hasErrors && Boolean(tableBatchState.importFile) && !tableBatchState.committing;
+        commitBtn.disabled = !canCommit;
+        commitBtn.textContent = tableBatchState.committing ? '登録中...' : '登録を確定';
+    }
+
+    if (!validation) {
+        if (summaryEl) summaryEl.innerHTML = '';
+        if (issuesEl) issuesEl.innerHTML = '';
+        if (previewTableEl) previewTableEl.innerHTML = '';
+        return;
+    }
+
+    if (summaryEl) {
+        summaryEl.innerHTML = renderValidationSummary(validation, '表形式で入力');
+    }
+    if (issuesEl) {
+        issuesEl.innerHTML = renderValidationIssues(validation);
+    }
+    if (previewTableEl) {
+        previewTableEl.innerHTML = renderValidationTable(validation);
+    }
+}
+
+function renderTableBatchView() {
+    const inputTableEl = document.getElementById('table-input-table');
+    if (inputTableEl) {
+        inputTableEl.innerHTML = renderTableBatchRows();
+    }
+
+    renderTableBatchPreviewView();
+}
+
+async function initTableBatchRegistration() {
+    clearTableBatchState();
+    await AppState.ensureMasterData();
+    renderTableBatchView();
+}
+
 
 // =====================================
 // HTML から呼ぶコントローラ
@@ -682,6 +1656,356 @@ window.RegController = {
     setType(type) {
         regState.type = type; // 'individual' or 'bulk'
         Router.to('reg-input-1');
+    },
+
+    openBatchMode(mode) {
+        if (mode === 'simple') {
+            Router.to('reg-batch-simple');
+            return;
+        }
+
+        if (mode === 'table') {
+            Router.to('reg-batch-table');
+            return;
+        }
+
+        if (mode === 'csv') {
+            Router.to('reg-batch');
+            return;
+        }
+    },
+
+    updateSimpleCommonField(field, value) {
+        simpleBatchState.common[field] = value;
+        markSimpleBatchDirty();
+        if (field === 'managementType' || field === 'genre') {
+            renderSimpleBatchView();
+            return;
+        }
+
+        renderSimpleBatchPreviewView();
+    },
+
+    updateSimpleRowField(rowId, field, value) {
+        const row = simpleBatchState.rows.find(item => item.id === rowId);
+        if (!row) {
+            return;
+        }
+
+        row[field] = value;
+        markSimpleBatchDirty();
+        renderSimpleBatchPreviewView();
+    },
+
+    addSimpleRow() {
+        simpleBatchState.rows.push(createSimpleDetailRow());
+        markSimpleBatchDirty('明細行を追加しました。プレビューを更新してください。');
+        renderSimpleBatchView();
+    },
+
+    duplicateSimpleRow(rowId) {
+        const row = simpleBatchState.rows.find(item => item.id === rowId);
+        if (!row) {
+            return;
+        }
+
+        simpleBatchState.rows.push({
+            ...row,
+            id: simpleDetailRowSequence++,
+        });
+        markSimpleBatchDirty('明細行を複製しました。プレビューを更新してください。');
+        renderSimpleBatchView();
+    },
+
+    removeSimpleRow(rowId) {
+        if (simpleBatchState.rows.length === 1) {
+            simpleBatchState.rows = [createSimpleDetailRow()];
+        } else {
+            simpleBatchState.rows = simpleBatchState.rows.filter(item => item.id !== rowId);
+        }
+
+        if (simpleBatchState.rows.length === 0) {
+            simpleBatchState.rows.push(createSimpleDetailRow());
+        }
+
+        markSimpleBatchDirty('明細行を更新しました。プレビューを更新してください。');
+        renderSimpleBatchView();
+    },
+
+    generateSimpleSerials() {
+        if (!isSimpleIndividualMode()) {
+            return;
+        }
+
+        const prefix = document.getElementById('simple-serial-prefix')?.value || '';
+        const startRaw = (document.getElementById('simple-serial-start')?.value || '').trim();
+
+        if (!/^\d+$/.test(startRaw)) {
+            alert('開始番号には数字を入力してください');
+            return;
+        }
+
+        const startNumber = Number(startRaw);
+        const width = startRaw.length;
+
+        for (let i = 0; i < simpleBatchState.rows.length; i += 1) {
+            simpleBatchState.rows[i].serialNumber = prefix + String(startNumber + i).padStart(width, '0');
+        }
+
+        markSimpleBatchDirty('シリアル番号を連番生成しました。プレビューを更新してください。');
+        renderSimpleBatchView();
+    },
+
+    async prepareSimpleBatchPreview() {
+        let rows;
+        try {
+            rows = buildRowsFromSimpleBatchState();
+            if (rows.length === 0) {
+                throw new Error('明細行を1件以上入力してください');
+            }
+        } catch (error) {
+            setSimpleBatchStatus('入力内容を確認してください。', 'error');
+            renderSimpleBatchView();
+            alert(error.message || '入力内容を確認してください');
+            return;
+        }
+
+        const validation = validateBatchRows(rows);
+        const importFile = buildImportCsvFromValidatedRows(validation.rowResults);
+
+        simpleBatchState.validation = validation;
+        simpleBatchState.importFile = importFile;
+
+        if (validation.hasErrors) {
+            setSimpleBatchStatus('エラーがあるため登録できません。入力内容を修正してください。', 'error');
+        } else if (validation.hasWarnings) {
+            setSimpleBatchStatus('登録可能です。警告を確認してから「登録を確定」を押してください。', 'warning');
+        } else {
+            setSimpleBatchStatus('登録可能です。内容を確認してから「登録を確定」を押してください。', 'success');
+        }
+
+        renderSimpleBatchView();
+        document.getElementById('simple-preview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    resetSimpleBatchInput() {
+        clearSimpleBatchState();
+        renderSimpleBatchView();
+    },
+
+    async commitSimpleBatchImport() {
+        if (simpleBatchState.committing) {
+            return;
+        }
+
+        if (!simpleBatchState.validation) {
+            alert('先にプレビューを作成してください');
+            return;
+        }
+
+        if (simpleBatchState.validation.hasErrors) {
+            alert('エラーがあるため登録できません。入力内容を修正してから再度プレビューしてください。');
+            return;
+        }
+
+        if (!simpleBatchState.importFile) {
+            alert('登録対象データがありません');
+            return;
+        }
+
+        simpleBatchState.committing = true;
+        simpleBatchState.printConfig = readBatchLabelSettings();
+        setSimpleBatchStatus('登録処理を実行しています。しばらくお待ちください。', 'info');
+        renderSimpleBatchView();
+
+        const formData = new FormData();
+        formData.append('file', simpleBatchState.importFile);
+
+        let response;
+        try {
+            response = await API.assets.batchRegister('commit', formData);
+        } catch (error) {
+            console.error(error);
+            const msg =
+                error.response?.data?.error?.message ||
+                error.response?.data?.error ||
+                error.message;
+
+            simpleBatchState.committing = false;
+            setSimpleBatchStatus('登録に失敗しました。内容を確認して再度実行してください。', 'error');
+            renderSimpleBatchView();
+            alert('一括登録に失敗しました: ' + msg);
+            return;
+        }
+
+        simpleBatchState.results = Array.isArray(response?.results) ? response.results : [];
+
+        try {
+            await this.printImportedLabels(simpleBatchState.printConfig, simpleBatchState.results);
+        } catch (error) {
+            console.error('Post-commit print preparation error:', error);
+            alert(
+                '登録は完了しましたが、印刷準備でエラーが発生しました。\n'
+                + (error.message || '一覧画面から手動で印刷してください。')
+            );
+        } finally {
+            clearSimpleBatchState();
+        }
+
+        if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
+            CommonController.showComplete('一括登録が完了しました');
+        } else {
+            Router.to('complete');
+        }
+    },
+
+    updateTableBatchField(rowId, field, value) {
+        const row = tableBatchState.rows.find(item => item.id === rowId);
+        if (!row) {
+            return;
+        }
+
+        row[field] = value;
+        markTableBatchDirty();
+        renderTableBatchPreviewView();
+    },
+
+    addTableBatchRow() {
+        tableBatchState.rows.push(createDefaultTableRow());
+        markTableBatchDirty('入力行を追加しました。プレビューを更新してください。');
+        renderTableBatchView();
+    },
+
+    duplicateTableBatchRow(rowId) {
+        const row = tableBatchState.rows.find(item => item.id === rowId);
+        if (!row) {
+            return;
+        }
+
+        tableBatchState.rows.push({
+            ...row,
+            id: tableRowSequence++,
+        });
+        markTableBatchDirty('入力行を複製しました。プレビューを更新してください。');
+        renderTableBatchView();
+    },
+
+    removeTableBatchRow(rowId) {
+        if (tableBatchState.rows.length === 1) {
+            tableBatchState.rows = [createDefaultTableRow()];
+        } else {
+            tableBatchState.rows = tableBatchState.rows.filter(item => item.id !== rowId);
+        }
+
+        if (tableBatchState.rows.length === 0) {
+            tableBatchState.rows.push(createDefaultTableRow());
+        }
+
+        markTableBatchDirty('入力行を更新しました。プレビューを更新してください。');
+        renderTableBatchView();
+    },
+
+    async prepareTableBatchPreview() {
+        let rows;
+        try {
+            rows = buildRowsFromTableBatchState();
+            if (rows.length === 0) {
+                throw new Error('入力行を1件以上入力してください');
+            }
+        } catch (error) {
+            setTableBatchStatus('入力内容を確認してください。', 'error');
+            renderTableBatchView();
+            alert(error.message || '入力内容を確認してください');
+            return;
+        }
+
+        const validation = validateBatchRows(rows);
+        const importFile = buildImportCsvFromValidatedRows(validation.rowResults);
+
+        tableBatchState.validation = validation;
+        tableBatchState.importFile = importFile;
+
+        if (validation.hasErrors) {
+            setTableBatchStatus('エラーがあるため登録できません。入力内容を修正してください。', 'error');
+        } else if (validation.hasWarnings) {
+            setTableBatchStatus('登録可能です。警告を確認してから「登録を確定」を押してください。', 'warning');
+        } else {
+            setTableBatchStatus('登録可能です。内容を確認してから「登録を確定」を押してください。', 'success');
+        }
+
+        renderTableBatchView();
+        document.getElementById('table-preview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    resetTableBatchInput() {
+        clearTableBatchState();
+        renderTableBatchView();
+    },
+
+    async commitTableBatchImport() {
+        if (tableBatchState.committing) {
+            return;
+        }
+
+        if (!tableBatchState.validation) {
+            alert('先にプレビューを作成してください');
+            return;
+        }
+
+        if (tableBatchState.validation.hasErrors) {
+            alert('エラーがあるため登録できません。入力内容を修正してから再度プレビューしてください。');
+            return;
+        }
+
+        if (!tableBatchState.importFile) {
+            alert('登録対象データがありません');
+            return;
+        }
+
+        tableBatchState.committing = true;
+        tableBatchState.printConfig = readBatchLabelSettings();
+        setTableBatchStatus('登録処理を実行しています。しばらくお待ちください。', 'info');
+        renderTableBatchView();
+
+        const formData = new FormData();
+        formData.append('file', tableBatchState.importFile);
+
+        let response;
+        try {
+            response = await API.assets.batchRegister('commit', formData);
+        } catch (error) {
+            console.error(error);
+            const msg =
+                error.response?.data?.error?.message ||
+                error.response?.data?.error ||
+                error.message;
+
+            tableBatchState.committing = false;
+            setTableBatchStatus('登録に失敗しました。内容を確認して再度実行してください。', 'error');
+            renderTableBatchView();
+            alert('一括登録に失敗しました: ' + msg);
+            return;
+        }
+
+        tableBatchState.results = Array.isArray(response?.results) ? response.results : [];
+
+        try {
+            await this.printImportedLabels(tableBatchState.printConfig, tableBatchState.results);
+        } catch (error) {
+            console.error('Post-commit print preparation error:', error);
+            alert(
+                '登録は完了しましたが、印刷準備でエラーが発生しました。\n'
+                + (error.message || '一覧画面から手動で印刷してください。')
+            );
+        } finally {
+            clearTableBatchState();
+        }
+
+        if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
+            CommonController.showComplete('一括登録が完了しました');
+        } else {
+            Router.to('complete');
+        }
     },
 
     // P4 -> P5: 入力画面1保存
@@ -800,12 +2124,9 @@ window.RegController = {
         }
     },
 
-    // 一括登録用 CSVアップロード処理
-    async uploadCsv() {
+    // 一括登録用 CSVプレビュー作成
+    async prepareBatchPreview() {
         const fileInput = document.getElementById('file-csv');
-        const labelType = document.getElementById('labelCodeType').value;
-        const tapeWidth = document.getElementById('labelTapeWidth').value;
-        const halfcut = document.getElementById('labelHalfcut').checked;
 
         if (!fileInput || fileInput.files.length === 0) {
             alert('ファイルを選択してください');
@@ -814,17 +2135,70 @@ window.RegController = {
 
         const originalFile = fileInput.files[0];
 
-        let importFile;
         try {
-            importFile = await buildImportCsvFromTemplateFile(originalFile);
+            const preview = await buildBatchImportPreviewFromTemplateFile(originalFile);
+            batchImportState.sourceFileName = originalFile.name;
+            batchImportState.rows = preview.rows;
+            batchImportState.validation = preview.validation;
+            batchImportState.importFile = preview.importFile;
+
+            if (preview.validation.hasErrors) {
+                setBatchStatus('エラーがあるため登録できません。内容を確認して CSV を修正してください。', 'error');
+            } else if (preview.validation.hasWarnings) {
+                setBatchStatus('登録可能です。警告を確認してから「登録を確定」を押してください。', 'warning');
+            } else {
+                setBatchStatus('登録可能です。内容を確認してから「登録を確定」を押してください。', 'success');
+            }
+
+            renderBatchImportView();
+            document.getElementById('batch-preview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (error) {
             console.error('CSV変換エラー:', error);
+            clearBatchPreviewState();
+            setBatchStatus('CSVの解析に失敗しました。テンプレート内容を確認してください。', 'error');
+            renderBatchImportView();
             alert('CSVの変換に失敗しました: ' + (error.message || 'テンプレート内容を確認してください'));
+        }
+    },
+
+    resetBatchPreview() {
+        const fileInput = document.getElementById('file-csv');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+
+        clearBatchImportState();
+        renderBatchImportView();
+    },
+
+    // 一括登録の確定処理
+    async commitBatchImport() {
+        if (batchImportState.committing) {
             return;
         }
 
+        if (!batchImportState.validation) {
+            alert('先にプレビューを作成してください');
+            return;
+        }
+
+        if (batchImportState.validation.hasErrors) {
+            alert('エラーがあるため登録できません。CSV を修正してから再度プレビューしてください。');
+            return;
+        }
+
+        if (!batchImportState.importFile) {
+            alert('登録対象データがありません');
+            return;
+        }
+
+        batchImportState.committing = true;
+        batchImportState.printConfig = readBatchLabelSettings();
+        setBatchStatus('登録処理を実行しています。しばらくお待ちください。', 'info');
+        renderBatchImportView();
+
         const formData = new FormData();
-        formData.append('file', importFile);
+        formData.append('file', batchImportState.importFile);
 
         let response;
         try {
@@ -835,22 +2209,20 @@ window.RegController = {
                 error.response?.data?.error?.message ||
                 error.response?.data?.error ||
                 error.message;
+
+            batchImportState.committing = false;
+            setBatchStatus('登録に失敗しました。内容を確認して再度実行してください。', 'error');
+            renderBatchImportView();
             alert('一括登録に失敗しました: ' + msg);
             return;
         }
 
         console.log('Batch upload response:', response);
 
-        batchImportState.printConfig = {
-            type: labelType,
-            width: tapeWidth,
-            halfcut,
-        };
         batchImportState.results = Array.isArray(response?.results) ? response.results : [];
-        console.log('sending converted file:', importFile);
 
         try {
-            await this.printImportedLabels();
+            await this.printImportedLabels(batchImportState.printConfig, batchImportState.results);
         } catch (error) {
             console.error('Post-commit print preparation error:', error);
             alert(
@@ -869,9 +2241,7 @@ window.RegController = {
     },
 
     // 一括登録後のラベル印刷処理
-    async printImportedLabels() {
-        const config = batchImportState.printConfig;
-        const results = batchImportState.results;
+    async printImportedLabels(config = batchImportState.printConfig, results = batchImportState.results) {
         if (!config || !Array.isArray(results)) {
             return;
         }
@@ -1004,7 +2374,13 @@ function updateInputVisibility() {
 // Router から呼ばれる初期化フック
 // =====================================
 export async function initRegistration(step) {
-    if (step === 'step1') {
+    if (step === 'batch') {
+        await initBatchRegistration();
+    } else if (step === 'batch-simple') {
+        await initSimpleBatchRegistration();
+    } else if (step === 'batch-table') {
+        await initTableBatchRegistration();
+    } else if (step === 'step1') {
         await AppState.ensureMasterData();
         renderGenreOptions();
         const form = document.getElementById('form-reg-1');

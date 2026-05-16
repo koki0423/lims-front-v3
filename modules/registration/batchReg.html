@@ -1,5 +1,5 @@
 <div class="screen-content">
-    <h2>新規登録 > 管理方法選択 > 一括登録</h2>
+    <h2>新規登録 > 管理方法選択 > まとめて登録 > CSVファイルから登録</h2>
     <div class="form-group">
         <div style="margin-bottom: 10px;">
             <button type="button" class="secondary-btn" onclick="RegController.downloadBatchTemplate()">
@@ -13,8 +13,6 @@
         <div class="input-file">
             <input type="file" id="file-csv" name="file-csv" accept=".csv" />
         </div>
-
-
     </div>
     <div class="form-group">
         <label>ラベル設定</label>
@@ -41,8 +39,18 @@
         </div>
     </div>
 
+    <div class="form-group" id="batch-preview-section">
+        <label>登録前プレビュー</label>
+        <div id="batch-preview-status"></div>
+        <div id="batch-preview-summary" style="margin-top: 12px;"></div>
+        <div id="batch-preview-issues" style="margin-top: 12px;"></div>
+        <div id="batch-preview-table" style="margin-top: 12px;"></div>
+    </div>
+
     <div class="nav-buttons" style="margin-top: 60px;">
-        <button class="back-btn" onclick="Router.to('reg-select')">戻る</button>
-        <button class="primary-btn" onclick="RegController.uploadCsv()">登録</button>
+        <button class="back-btn" onclick="Router.to('reg-batch-select')">戻る</button>
+        <button type="button" class="secondary-btn" id="batch-reset-btn" onclick="RegController.resetBatchPreview()">クリア</button>
+        <button type="button" class="secondary-btn" id="batch-preview-btn" onclick="RegController.prepareBatchPreview()">プレビューを作成</button>
+        <button class="primary-btn" id="batch-commit-btn" onclick="RegController.commitBatchImport()">登録を確定</button>
     </div>
 </div>

@@ -1,0 +1,89 @@
+<div class="screen-content">
+    <h2>新規登録 > 管理方法選択 > まとめて登録 > かんたん入力</h2>
+
+    <div class="form-group">
+        <label>共通項目</label>
+        <div class="simple-common-grid">
+            <div>
+                <label for="simple-management-type">管理区分</label>
+                <select id="simple-management-type" onchange="RegController.updateSimpleCommonField('managementType', this.value)">
+                    <option value="individual">個別管理</option>
+                    <option value="bulk">一括管理</option>
+                </select>
+            </div>
+            <div>
+                <label for="simple-manufacturer">メーカー</label>
+                <input type="text" id="simple-manufacturer" oninput="RegController.updateSimpleCommonField('manufacturer', this.value)" />
+            </div>
+            <div>
+                <label for="simple-model-number">型番</label>
+                <input type="text" id="simple-model-number" oninput="RegController.updateSimpleCommonField('modelNumber', this.value)" />
+            </div>
+            <div>
+                <label for="simple-storage-location">保管場所（所有者）</label>
+                <input type="text" id="simple-storage-location" oninput="RegController.updateSimpleCommonField('storageLocation', this.value)" />
+            </div>
+            <div>
+                <label for="simple-genre">備品ジャンル</label>
+                <select id="simple-genre" onchange="RegController.updateSimpleCommonField('genre', this.value)"></select>
+            </div>
+            <div>
+                <label for="simple-purchase-date">購入日</label>
+                <input type="date" id="simple-purchase-date" onchange="RegController.updateSimpleCommonField('purchaseDate', this.value)" />
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>明細</label>
+        <div class="simple-toolbar">
+            <button type="button" class="secondary-btn" onclick="RegController.addSimpleRow()">行を追加</button>
+            <div class="simple-serial-tools" id="simple-serial-tools">
+                <input type="text" id="simple-serial-prefix" placeholder="連番プレフィックス" />
+                <input type="text" id="simple-serial-start" value="001" placeholder="開始番号" />
+                <button type="button" class="secondary-btn" onclick="RegController.generateSimpleSerials()">シリアル連番を設定</button>
+            </div>
+        </div>
+        <div id="simple-detail-table" style="margin-top: 12px;"></div>
+    </div>
+
+    <div class="form-group">
+        <label>ラベル設定</label>
+        <div class="info-row">
+            <span class="info-label">コード種別</span>
+            <select id="labelCodeType" name="labelCodeType">
+                <option value="QR" selected>QRコード</option>
+                <option value="CODE128">バーコード(Code128)</option>
+            </select>
+        </div>
+        <div class="info-row" style="margin-top: 8px;">
+            <span class="info-label">テープ幅</span>
+            <select id="labelTapeWidth" name="labelTapeWidth">
+                <option value="9" selected>9 mm</option>
+                <option value="12">12 mm</option>
+                <option value="18">18 mm</option>
+            </select>
+        </div>
+        <div class="info-row" style="margin-top: 8px;">
+            <label>
+                <input type="checkbox" id="labelHalfcut" name="labelHalfcut" checked disabled>
+                ハーフカットを有効にする
+            </label>
+        </div>
+    </div>
+
+    <div class="form-group" id="simple-preview-section">
+        <label>登録前プレビュー</label>
+        <div id="simple-preview-status"></div>
+        <div id="simple-preview-summary" style="margin-top: 12px;"></div>
+        <div id="simple-preview-issues" style="margin-top: 12px;"></div>
+        <div id="simple-preview-table" style="margin-top: 12px;"></div>
+    </div>
+
+    <div class="nav-buttons" style="margin-top: 60px;">
+        <button class="back-btn" onclick="Router.to('reg-batch-select')">戻る</button>
+        <button type="button" class="secondary-btn" id="simple-reset-btn" onclick="RegController.resetSimpleBatchInput()">クリア</button>
+        <button type="button" class="secondary-btn" id="simple-preview-btn" onclick="RegController.prepareSimpleBatchPreview()">プレビューを作成</button>
+        <button class="primary-btn" id="simple-commit-btn" onclick="RegController.commitSimpleBatchImport()">登録を確定</button>
+    </div>
+</div>

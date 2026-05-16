@@ -14,7 +14,35 @@ const routes = {
 
     // === 新規登録 ===
     'reg-select': { path: 'modules/registration/step1.html', title: '新規登録', loader: loadRegistrationModule },
-    'reg-batch': { path: 'modules/registration/batchReg.html', title: '新規登録 > 管理方法選択 > 一括登録', loader: loadRegistrationModule },
+    'reg-batch-select': {
+        path: 'modules/registration/batchSelect.html',
+        title: '新規登録 > 管理方法選択 > まとめて登録',
+        loader: loadRegistrationModule
+    },
+    'reg-batch-simple': {
+        path: 'modules/registration/batchSimple.html',
+        title: '新規登録 > 管理方法選択 > まとめて登録 > かんたん入力',
+        loader: loadRegistrationModule,
+        init: async (module) => {
+            await module.initRegistration('batch-simple');
+        }
+    },
+    'reg-batch-table': {
+        path: 'modules/registration/batchTable.html',
+        title: '新規登録 > 管理方法選択 > まとめて登録 > 表形式で入力',
+        loader: loadRegistrationModule,
+        init: async (module) => {
+            await module.initRegistration('batch-table');
+        }
+    },
+    'reg-batch': {
+        path: 'modules/registration/batchReg.html',
+        title: '新規登録 > 管理方法選択 > まとめて登録 > CSVファイルから登録',
+        loader: loadRegistrationModule,
+        init: async (module) => {
+            await module.initRegistration('batch');
+        }
+    },
     'reg-input-1': {
         path: 'modules/registration/step2.html',
         title: '新規登録 > 基本',

@@ -483,3 +483,183 @@ button.primary-btn {
     cursor: not-allowed;
     background: #f9f9f9;
 }
+
+.batch-status-banner {
+    padding: 12px 14px;
+    border-radius: 6px;
+    border: 1px solid #d7e7dc;
+    background: #f5fbf7;
+    color: #24543a;
+}
+
+.batch-status-banner.info {
+    background: #f5fbf7;
+    border-color: #d7e7dc;
+    color: #24543a;
+}
+
+.batch-status-banner.success {
+    background: #edf8ee;
+    border-color: #cde9d0;
+    color: #255c31;
+}
+
+.batch-status-banner.warning {
+    background: #fff9eb;
+    border-color: #f0d99c;
+    color: #7a5710;
+}
+
+.batch-status-banner.error {
+    background: #fff1f1;
+    border-color: #f2c7c7;
+    color: #9d2f2f;
+}
+
+.batch-preview-meta {
+    margin-top: 10px;
+    color: #555;
+    font-size: 0.95rem;
+}
+
+.batch-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.batch-summary-card {
+    padding: 12px;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    background: #fafafa;
+}
+
+.batch-summary-card span {
+    display: block;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.batch-summary-card strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 1.2rem;
+    color: #222;
+}
+
+.batch-issue-group {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 6px;
+}
+
+.batch-issue-group.error {
+    background: #fff3f3;
+    border: 1px solid #f0caca;
+}
+
+.batch-issue-group.warning {
+    background: #fff9eb;
+    border: 1px solid #f0d99c;
+}
+
+.batch-issue-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.batch-message-list {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.batch-table-scroll {
+    overflow-x: auto;
+}
+
+.batch-preview-table {
+    min-width: 1400px;
+}
+
+.batch-preview-table th {
+    white-space: nowrap;
+}
+
+.batch-cell-error {
+    background: #fff1f1;
+}
+
+.batch-cell-warning {
+    background: #fff9eb;
+}
+
+.batch-empty-value {
+    color: #888;
+}
+
+.simple-common-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px 18px;
+    margin-top: 12px;
+}
+
+.simple-common-grid label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: bold;
+    color: #555;
+}
+
+.simple-common-grid input,
+.simple-common-grid select,
+.simple-toolbar input,
+.simple-input-table input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.simple-toolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.simple-serial-tools {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.simple-serial-tools input {
+    min-width: 140px;
+}
+
+.simple-input-table {
+    min-width: 920px;
+}
+
+.table-input-table {
+    min-width: 1700px;
+}
+
+.table-input-table input,
+.table-input-table select {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.batch-row-actions {
+    white-space: nowrap;
+}
+
+.small-btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}

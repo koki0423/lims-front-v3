@@ -1,0 +1,51 @@
+<div class="screen-content">
+    <h2>新規登録 > 管理方法選択 > まとめて登録 > 表形式で入力</h2>
+
+    <div class="form-group">
+        <label>入力表</label>
+        <div class="simple-toolbar">
+            <button type="button" class="secondary-btn" onclick="RegController.addTableBatchRow()">行を追加</button>
+        </div>
+        <div id="table-input-table" style="margin-top: 12px;"></div>
+    </div>
+
+    <div class="form-group">
+        <label>ラベル設定</label>
+        <div class="info-row">
+            <span class="info-label">コード種別</span>
+            <select id="labelCodeType" name="labelCodeType">
+                <option value="QR" selected>QRコード</option>
+                <option value="CODE128">バーコード(Code128)</option>
+            </select>
+        </div>
+        <div class="info-row" style="margin-top: 8px;">
+            <span class="info-label">テープ幅</span>
+            <select id="labelTapeWidth" name="labelTapeWidth">
+                <option value="9" selected>9 mm</option>
+                <option value="12">12 mm</option>
+                <option value="18">18 mm</option>
+            </select>
+        </div>
+        <div class="info-row" style="margin-top: 8px;">
+            <label>
+                <input type="checkbox" id="labelHalfcut" name="labelHalfcut" checked disabled>
+                ハーフカットを有効にする
+            </label>
+        </div>
+    </div>
+
+    <div class="form-group" id="table-preview-section">
+        <label>登録前プレビュー</label>
+        <div id="table-preview-status"></div>
+        <div id="table-preview-summary" style="margin-top: 12px;"></div>
+        <div id="table-preview-issues" style="margin-top: 12px;"></div>
+        <div id="table-preview-table" style="margin-top: 12px;"></div>
+    </div>
+
+    <div class="nav-buttons" style="margin-top: 60px;">
+        <button class="back-btn" onclick="Router.to('reg-batch-select')">戻る</button>
+        <button type="button" class="secondary-btn" id="table-reset-btn" onclick="RegController.resetTableBatchInput()">クリア</button>
+        <button type="button" class="secondary-btn" id="table-preview-btn" onclick="RegController.prepareTableBatchPreview()">プレビューを作成</button>
+        <button class="primary-btn" id="table-commit-btn" onclick="RegController.commitTableBatchImport()">登録を確定</button>
+    </div>
+</div>

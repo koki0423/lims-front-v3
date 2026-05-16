@@ -1,0 +1,18 @@
+<div class="screen-content">
+    <h2>新規登録 > 管理方法選択 > まとめて登録</h2>
+    <div class="form-group">
+        <label>登録方法選択</label>
+        <div class="menu-grid two-col" style="margin-top: 12px;">
+            <button class="menu-btn large-text" onclick="RegController.openBatchMode('simple')">
+                かんたん入力<br><span class="sub-text">同じ種類の備品をまとめて登録</span>
+            </button>
+            <button class="menu-btn large-text" onclick="RegController.openBatchMode('table')">
+                表形式で入力<br><span class="sub-text">Web上の表で直接入力</span>
+            </button>
+            <button class="menu-btn large-text" onclick="RegController.openBatchMode('csv')">
+                CSVファイルから登録<br><span class="sub-text">テンプレートCSVを取り込む</span>
+            </button>
+        </div>
+    </div>
+    <button class="back-btn" onclick="Router.to('reg-select')">戻る</button>
+</div>
