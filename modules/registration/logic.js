@@ -182,6 +182,18 @@ function setSimpleBatchStatus(message, tone = 'info') {
     simpleBatchState.statusTone = tone;
 }
 
+function resetSimpleSerialGeneratorInputs() {
+    const prefixEl = document.getElementById('simple-serial-prefix');
+    const startEl = document.getElementById('simple-serial-start');
+
+    if (prefixEl) {
+        prefixEl.value = '';
+    }
+    if (startEl) {
+        startEl.value = '001';
+    }
+}
+
 function clearSimpleBatchState() {
     simpleDetailRowSequence = 1;
     simpleBatchState.common = createDefaultSimpleCommonFields();
@@ -191,6 +203,7 @@ function clearSimpleBatchState() {
     simpleBatchState.printConfig = null;
     simpleBatchState.results = null;
     simpleBatchState.committing = false;
+    resetSimpleSerialGeneratorInputs();
 }
 
 function markSimpleBatchDirty(message = '入力内容が変更されました。プレビューを更新してください。') {
@@ -284,6 +297,122 @@ function buildBatchLabels(results) {
                 col_e: row.management_number || ''
             };
         });
+}
+
+function pickFirstBatchResultText(values) {
+    for (let i = 0; i < values.length; i += 1) {
+        const value = values[i];
+        if (typeof value === 'string' && value.trim() !== '') {
+            return value.trim();
+        }
+    }
+
+    return '';
+}
+
+function getBatchResultSourceLabel(result, index) {
+    const candidates = [
+        result?.source_line,
+        result?.sourceLine,
+        result?.line_number,
+        result?.lineNumber,
+        result?.row_number,
+        result?.rowNumber,
+        result?.row
+    ];
+
+    for (let i = 0; i < candidates.length; i += 1) {
+        const num = Number(candidates[i]);
+        if (Number.isInteger(num) && num > 0) {
+            return `${num}行目`;
+        }
+    }
+
+    return `${index + 1}件目`;
+}
+
+function buildBatchCommitFailureMessage(result, index) {
+    const sourceLabel = getBatchResultSourceLabel(result, index);
+    const name = cleanCell(result?.name);
+    const message = pickFirstBatchResultText([
+        result?.error_message,
+        result?.message,
+        result?.error?.message,
+        result?.error,
+        result?.detail,
+        result?.reason
+    ]) || '登録に失敗しました。';
+    const targetLabel = name === '' ? sourceLabel : `${sourceLabel} (${name})`;
+
+    return `${targetLabel}: ${message}`;
+}
+
+function summarizeBatchCommitResults(results) {
+    const safeResults = Array.isArray(results) ? results : [];
+    const summary = {
+        totalCount: safeResults.length,
+        successCount: 0,
+        failureCount: 0,
+        failureMessages: []
+    };
+
+    for (let i = 0; i < safeResults.length; i += 1) {
+        const result = safeResults[i];
+        if (result?.ok === true) {
+            summary.successCount += 1;
+            continue;
+        }
+
+        summary.failureCount += 1;
+        if (summary.failureMessages.length < 10) {
+            summary.failureMessages.push(buildBatchCommitFailureMessage(result, i));
+        }
+    }
+
+    return summary;
+}
+
+function notifyBatchCommitFailures(summary) {
+    if (!summary || summary.failureCount === 0) {
+        return;
+    }
+
+    const headline = summary.successCount > 0
+        ? `一括登録は一部失敗しました。\n成功: ${summary.successCount}件 / 失敗: ${summary.failureCount}件`
+        : `一括登録に成功した行はありませんでした。\n失敗: ${summary.failureCount}件`;
+    const detailText = summary.failureMessages.length > 0
+        ? `\n\n失敗詳細:\n${summary.failureMessages.join('\n')}`
+        : '';
+    const remainingCount = Math.max(0, summary.failureCount - summary.failureMessages.length);
+    const tail = remainingCount > 0 ? `\n...他 ${remainingCount}件` : '';
+
+    alert(headline + detailText + tail);
+}
+
+function buildBatchCommitCompletionMessage(summary) {
+    if (!summary || summary.totalCount === 0) {
+        return '一括登録が完了しました';
+    }
+
+    if (summary.failureCount === 0) {
+        return `一括登録が完了しました（${summary.successCount}件成功）`;
+    }
+
+    if (summary.successCount > 0) {
+        return `一括登録は一部失敗しました（成功${summary.successCount}件 / 失敗${summary.failureCount}件）`;
+    }
+
+    return `一括登録は失敗しました（失敗${summary.failureCount}件）`;
+}
+
+function showBatchCommitCompletion(summary) {
+    const message = buildBatchCommitCompletionMessage(summary);
+
+    if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
+        CommonController.showComplete(message);
+    } else {
+        Router.to('complete');
+    }
 }
 
 function ensureRegistrantInputValidation() {
@@ -752,6 +881,36 @@ function validateBatchRows(rows) {
         hasErrors: summary.errorRowCount > 0,
         hasWarnings: summary.warningRowCount > 0
     };
+}
+
+function formatBatchPreviewPurchaseDate(value) {
+    const raw = cleanCell(value);
+    if (raw === '') {
+        return '';
+    }
+
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) {
+        return raw;
+    }
+
+    return `${match[1]}/${match[2]}/${match[3]}`;
+}
+
+function getBatchPreviewValue(rowResult, fieldKey) {
+    if (fieldKey === 'quantity') {
+        return rowResult.issueMap.quantity?.level === 'error'
+            ? rowResult.row.quantity
+            : rowResult.normalized.quantity;
+    }
+
+    if (fieldKey === 'purchaseDate') {
+        return rowResult.issueMap.purchaseDate?.level === 'error'
+            ? rowResult.row.purchaseDate
+            : formatBatchPreviewPurchaseDate(rowResult.normalized.purchasedAt);
+    }
+
+    return rowResult.row[fieldKey];
 }
 
 function buildImportCsvFromValidatedRows(rowResults) {
@@ -1243,7 +1402,7 @@ function renderValidationTable(validation) {
 
     const body = validation.rowResults.map(rowResult => {
         const cells = BATCH_TEMPLATE_FIELDS.map(field => {
-            return renderBatchCell(rowResult.row[field.key], rowResult.issueMap[field.key]);
+            return renderBatchCell(getBatchPreviewValue(rowResult, field.key), rowResult.issueMap[field.key]);
         }).join('');
 
         return `
@@ -1839,9 +1998,13 @@ window.RegController = {
         }
 
         simpleBatchState.results = Array.isArray(response?.results) ? response.results : [];
+        const commitSummary = summarizeBatchCommitResults(simpleBatchState.results);
+        notifyBatchCommitFailures(commitSummary);
 
         try {
-            await this.printImportedLabels(simpleBatchState.printConfig, simpleBatchState.results);
+            if (simpleBatchState.results.length === 0 || commitSummary.successCount > 0) {
+                await this.printImportedLabels(simpleBatchState.printConfig, simpleBatchState.results);
+            }
         } catch (error) {
             console.error('Post-commit print preparation error:', error);
             alert(
@@ -1852,11 +2015,7 @@ window.RegController = {
             clearSimpleBatchState();
         }
 
-        if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-            CommonController.showComplete('一括登録が完了しました');
-        } else {
-            Router.to('complete');
-        }
+        showBatchCommitCompletion(commitSummary);
     },
 
     updateTableBatchField(rowId, field, value) {
@@ -1988,9 +2147,13 @@ window.RegController = {
         }
 
         tableBatchState.results = Array.isArray(response?.results) ? response.results : [];
+        const commitSummary = summarizeBatchCommitResults(tableBatchState.results);
+        notifyBatchCommitFailures(commitSummary);
 
         try {
-            await this.printImportedLabels(tableBatchState.printConfig, tableBatchState.results);
+            if (tableBatchState.results.length === 0 || commitSummary.successCount > 0) {
+                await this.printImportedLabels(tableBatchState.printConfig, tableBatchState.results);
+            }
         } catch (error) {
             console.error('Post-commit print preparation error:', error);
             alert(
@@ -2001,11 +2164,7 @@ window.RegController = {
             clearTableBatchState();
         }
 
-        if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-            CommonController.showComplete('一括登録が完了しました');
-        } else {
-            Router.to('complete');
-        }
+        showBatchCommitCompletion(commitSummary);
     },
 
     // P4 -> P5: 入力画面1保存
@@ -2220,9 +2379,13 @@ window.RegController = {
         console.log('Batch upload response:', response);
 
         batchImportState.results = Array.isArray(response?.results) ? response.results : [];
+        const commitSummary = summarizeBatchCommitResults(batchImportState.results);
+        notifyBatchCommitFailures(commitSummary);
 
         try {
-            await this.printImportedLabels(batchImportState.printConfig, batchImportState.results);
+            if (batchImportState.results.length === 0 || commitSummary.successCount > 0) {
+                await this.printImportedLabels(batchImportState.printConfig, batchImportState.results);
+            }
         } catch (error) {
             console.error('Post-commit print preparation error:', error);
             alert(
@@ -2233,11 +2396,7 @@ window.RegController = {
             clearBatchImportState();
         }
 
-        if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-            CommonController.showComplete('一括登録が完了しました');
-        } else {
-            Router.to('complete');
-        }
+        showBatchCommitCompletion(commitSummary);
     },
 
     // 一括登録後のラベル印刷処理
