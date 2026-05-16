@@ -9,6 +9,7 @@ const lendState = {
         items: [],
         currentPage: 1,
         itemsPerPage: 20,
+        filter: 'all',
         totalPages: 1,
         totalItems: 0
     }
@@ -29,6 +30,8 @@ const returnState = {
 
 let isSubmittingLend = false;
 let isSubmittingReturn = false;
+const lendAssetNameCache = new Map();
+const lendAssetNameRequestCache = new Map();
 
 async function loadNfcReader() {
     return import('../../js/nfcReader.js');
@@ -94,6 +97,296 @@ function getLendQuantity(item) {
     return 1;
 }
 
+function displayHistoryValue(value, fallback = '-') {
+    if (value === undefined || value === null) {
+        return fallback;
+    }
+
+    const text = String(value).trim();
+    return text === '' ? fallback : text;
+}
+
+function isTruthyFlag(value) {
+    return value === true || value === 1 || value === '1' || value === '返却済み';
+}
+
+function isFalsyFlag(value) {
+    return value === false || value === 0 || value === '0' || value === '未返却';
+}
+
+function isLendReturned(item) {
+    const returnedFlag = item?.returned ?? item?.is_returned ?? item?.returned_flag;
+    if (isTruthyFlag(returnedFlag)) {
+        return true;
+    }
+    if (isFalsyFlag(returnedFlag)) {
+        return false;
+    }
+
+    return Boolean(
+        displayHistoryValue(item?.returned_at, '') !== ''
+        || displayHistoryValue(item?.processed_at, '') !== ''
+        || displayHistoryValue(item?.returned_on, '') !== ''
+    );
+}
+
+function getLendHistoryFilterLabel(filter) {
+    if (filter === 'active') {
+        return '貸出中';
+    }
+    if (filter === 'returned') {
+        return '返却済み';
+    }
+    return 'すべて';
+}
+
+function extractAssetNameFromPairResponse(response) {
+    const name = response?.master?.name || response?.asset?.name || '';
+    return typeof name === 'string' ? name.trim() : '';
+}
+
+async function fetchLendAssetName(managementNumber) {
+    const key = String(managementNumber || '').trim();
+    if (key === '') {
+        return '';
+    }
+
+    if (lendAssetNameCache.has(key)) {
+        return lendAssetNameCache.get(key);
+    }
+
+    if (lendAssetNameRequestCache.has(key)) {
+        return lendAssetNameRequestCache.get(key);
+    }
+
+    const request = API.assets.getPair(key)
+        .then((response) => {
+            const assetName = extractAssetNameFromPairResponse(response);
+            if (assetName !== '') {
+                lendAssetNameCache.set(key, assetName);
+            }
+            return assetName;
+        })
+        .catch((error) => {
+            console.warn('fetchLendAssetName error:', key, error);
+            return '';
+        })
+        .finally(() => {
+            lendAssetNameRequestCache.delete(key);
+        });
+
+    lendAssetNameRequestCache.set(key, request);
+    return request;
+}
+
+async function enrichLendHistoryItemsWithAssetNames(items) {
+    const safeItems = Array.isArray(items) ? items : [];
+    const uniqueManagementNumbers = Array.from(
+        new Set(
+            safeItems
+                .map(item => String(item?.management_number || '').trim())
+                .filter(value => value !== '')
+        )
+    );
+
+    await Promise.all(uniqueManagementNumbers.map(fetchLendAssetName));
+
+    return safeItems.map(item => {
+        const managementNumber = String(item?.management_number || '').trim();
+        return {
+            ...item,
+            asset_name: managementNumber === ''
+                ? ''
+                : (lendAssetNameCache.get(managementNumber) || item?.asset_name || '')
+        };
+    });
+}
+
+function getHistoryViewConfig(type) {
+    if (type === 'return') {
+        return {
+            listId: 'return-history-list',
+            paginationId: 'return-history-pagination',
+            statusId: 'return-history-status',
+            totalId: 'return-history-total',
+            pageId: 'return-history-page',
+            rangeId: 'return-history-range',
+            perPageId: 'return-history-per-page',
+            filterId: null,
+            emptyTitle: '返却履歴がありません',
+            emptyDescription: '返却処理がまだ登録されていないか、表示対象の履歴がありません。'
+        };
+    }
+
+    return {
+        listId: 'lend-history-list',
+        paginationId: 'lend-history-pagination',
+        statusId: 'lend-history-status',
+        totalId: 'lend-history-total',
+        pageId: 'lend-history-page',
+        rangeId: 'lend-history-range',
+        perPageId: 'lend-history-per-page',
+        filterId: 'lend-history-filter',
+        emptyTitle: '貸出履歴がありません',
+        emptyDescription: '貸出処理がまだ登録されていないか、表示対象の履歴がありません。'
+    };
+}
+
+function getHistoryDom(type) {
+    const config = getHistoryViewConfig(type);
+    return {
+        config,
+        list: document.getElementById(config.listId),
+        pagination: document.getElementById(config.paginationId),
+        status: document.getElementById(config.statusId),
+        total: document.getElementById(config.totalId),
+        page: document.getElementById(config.pageId),
+        range: document.getElementById(config.rangeId),
+        perPage: document.getElementById(config.perPageId),
+        filter: config.filterId ? document.getElementById(config.filterId) : null
+    };
+}
+
+function syncHistoryPerPageSelect(type, historyState) {
+    const { perPage } = getHistoryDom(type);
+    if (perPage) {
+        perPage.value = String(historyState.itemsPerPage);
+    }
+}
+
+function syncHistoryFilterSelect(type, historyState) {
+    const { filter } = getHistoryDom(type);
+    if (filter) {
+        filter.value = historyState.filter || 'all';
+    }
+}
+
+function updateHistorySummary(type, historyState) {
+    const { total, page, range } = getHistoryDom(type);
+    const safeTotalItems = Number(historyState.totalItems) || 0;
+    const safeTotalPages = Math.max(1, Number(historyState.totalPages) || 1);
+    const safeCurrentPage = Math.min(Math.max(1, Number(historyState.currentPage) || 1), safeTotalPages);
+
+    if (total) {
+        total.textContent = `${safeTotalItems}件`;
+    }
+    if (page) {
+        page.textContent = `${safeCurrentPage} / ${safeTotalPages}`;
+    }
+    if (range) {
+        if (safeTotalItems === 0) {
+            range.textContent = '0件';
+        } else {
+            const start = (safeCurrentPage - 1) * historyState.itemsPerPage + 1;
+            const end = Math.min(safeCurrentPage * historyState.itemsPerPage, safeTotalItems);
+            range.textContent = `${start}-${end}件`;
+        }
+    }
+}
+
+function setHistoryStatus(type, message, tone = 'info') {
+    const { status } = getHistoryDom(type);
+    if (!status) {
+        return;
+    }
+
+    status.className = `batch-status-banner ${tone}`;
+    status.textContent = message;
+}
+
+function renderHistoryEmptyState(title, description) {
+    return `
+        <div class="history-empty-state">
+            <strong>${escapeHtml(title)}</strong>
+            <p>${escapeHtml(description)}</p>
+        </div>
+    `;
+}
+
+function renderHistoryLoadingState() {
+    return `
+        <div class="history-loading-grid">
+            <div class="history-loading-card"></div>
+            <div class="history-loading-card"></div>
+            <div class="history-loading-card"></div>
+        </div>
+    `;
+}
+
+function renderHistoryField(label, value) {
+    return `
+        <div class="history-field">
+            <span class="history-field-label">${escapeHtml(label)}</span>
+            <strong>${escapeHtml(displayHistoryValue(value))}</strong>
+        </div>
+    `;
+}
+
+function renderLendHistoryRow(item) {
+    const returned = isLendReturned(item);
+    return `
+        <tr>
+            <td>${escapeHtml(displayHistoryValue(item.management_number))}</td>
+            <td>${escapeHtml(displayHistoryValue(item.asset_name, '備品名未取得'))}</td>
+            <td>${escapeHtml(displayHistoryValue(item.borrower_id || item.borrower || ''))}</td>
+            <td>${escapeHtml(displayHistoryValue(formatDate(item.lent_at || item.created_at || ''), '-'))}</td>
+            <td>${escapeHtml(displayHistoryValue(getLendQuantity(item), '1'))}</td>
+            <td>${returned ? 'true' : 'false'}</td>
+        </tr>
+    `;
+}
+
+function renderLendHistoryTable(items) {
+    return `
+        <table class="history-record-table">
+            <thead>
+                <tr>
+                    <th>備品番号</th>
+                    <th>備品名</th>
+                    <th>貸出先</th>
+                    <th>貸出日</th>
+                    <th>数量</th>
+                    <th>返却</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${items.map(renderLendHistoryRow).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function renderReturnHistoryRow(item) {
+    return `
+        <tr>
+            <td>${escapeHtml(displayHistoryValue(item.management_number))}</td>
+            <td>${escapeHtml(displayHistoryValue(item.borrower_id || item.borrower || ''))}</td>
+            <td>${escapeHtml(displayHistoryValue(formatDate(item.lent_at || item.lent_on || item.created_at || ''), '-'))}</td>
+            <td>${escapeHtml(displayHistoryValue(formatDate(item.returned_at || item.processed_at || ''), '-'))}</td>
+            <td>${escapeHtml(displayHistoryValue(item.quantity || getLendQuantity(item), '1'))}</td>
+        </tr>
+    `;
+}
+
+function renderReturnHistoryTable(items) {
+    return `
+        <table class="history-record-table">
+            <thead>
+                <tr>
+                    <th>備品番号</th>
+                    <th>貸出先</th>
+                    <th>貸出日</th>
+                    <th>返却日</th>
+                    <th>数量</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${items.map(renderReturnHistoryRow).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
 function showApiError(error, fallbackMessage) {
     const message = error?.response?.data?.message || error?.response?.data?.error || fallbackMessage;
     alert(message);
@@ -136,60 +429,49 @@ function renderReturnSelection() {
 }
 
 function renderLendHistory() {
-    const tbody = document.getElementById('lend-history-body');
-    const pagination = document.getElementById('lend-history-pagination');
-
-    if (!tbody) {
+    const { list, pagination, config } = getHistoryDom('lend');
+    if (!list) {
         return;
     }
 
+    syncHistoryPerPageSelect('lend', lendState.history);
+    syncHistoryFilterSelect('lend', lendState.history);
+    updateHistorySummary('lend', lendState.history);
+
     if (!lendState.history.items || lendState.history.items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
+        list.innerHTML = renderHistoryEmptyState(config.emptyTitle, config.emptyDescription);
         if (pagination) {
             pagination.innerHTML = '';
         }
+        setHistoryStatus('lend', `${getLendHistoryFilterLabel(lendState.history.filter)}の履歴はありません。`, 'info');
         return;
     }
 
-    tbody.innerHTML = lendState.history.items.map((item) => `
-        <tr>
-            <td>${escapeHtml(item.management_number || '')}</td>
-            <td>${escapeHtml(getLendQuantity(item))}</td>
-            <td>${escapeHtml(item.borrower_id || '')}</td>
-            <td>${escapeHtml(formatDate(item.lent_at || item.created_at || ''))}</td>
-            <td>${escapeHtml(formatDate(item.due_on || ''))}</td>
-        </tr>
-    `).join('');
-
+    list.innerHTML = renderLendHistoryTable(lendState.history.items);
+    setHistoryStatus('lend', `${getLendHistoryFilterLabel(lendState.history.filter)}の履歴を ${lendState.history.totalItems}件表示しています。`, 'success');
     renderHistoryPagination(pagination, lendState.history.totalPages, lendState.history.currentPage, 'lend');
 }
 
 function renderReturnHistory() {
-    const tbody = document.getElementById('return-history-body');
-    const pagination = document.getElementById('return-history-pagination');
-
-    if (!tbody) {
+    const { list, pagination, config } = getHistoryDom('return');
+    if (!list) {
         return;
     }
 
+    syncHistoryPerPageSelect('return', returnState.history);
+    updateHistorySummary('return', returnState.history);
+
     if (!returnState.history.items || returnState.history.items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
+        list.innerHTML = renderHistoryEmptyState(config.emptyTitle, config.emptyDescription);
         if (pagination) {
             pagination.innerHTML = '';
         }
+        setHistoryStatus('return', '表示できる返却履歴はありません。', 'info');
         return;
     }
 
-    tbody.innerHTML = returnState.history.items.map((item) => `
-        <tr>
-            <td>${escapeHtml(item.management_number || '')}</td>
-            <td>${escapeHtml(item.quantity || '')}</td>
-            <td>${escapeHtml(item.borrower_id || '')}</td>
-            <td>${escapeHtml(formatDate(item.lent_at || item.lent_on || item.created_at || ''))}</td>
-            <td>${escapeHtml(formatDate(item.returned_at || item.processed_at || ''))}</td>
-        </tr>
-    `).join('');
-
+    list.innerHTML = renderReturnHistoryTable(returnState.history.items);
+    setHistoryStatus('return', `${returnState.history.totalItems}件の返却履歴を表示しています。`, 'success');
     renderHistoryPagination(pagination, returnState.history.totalPages, returnState.history.currentPage, 'return');
 }
 
@@ -211,19 +493,31 @@ function renderHistoryPagination(container, totalPages, currentPage, type) {
         html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="LendReturnController.changeReturnHistoryPage(${currentPage - 1})">＜</button>`;
     }
 
-    for (let i = 1; i <= totalPages; i++) {
-        if (totalPages > 10 && Math.abs(currentPage - i) > 2 && i !== 1 && i !== totalPages) {
-            if (html.indexOf('...') === -1 || !html.endsWith('</span>')) {
-                html += '<span style="padding:0 5px;">...</span>';
-            }
+    const sequence = [];
+    for (let i = 1; i <= totalPages; i += 1) {
+        const shouldShow = totalPages <= 7 || i === 1 || i === totalPages || Math.abs(currentPage - i) <= 1;
+        if (shouldShow) {
+            sequence.push(i);
             continue;
         }
 
-        const activeClass = i === currentPage ? 'active' : '';
+        if (sequence[sequence.length - 1] !== 'ellipsis') {
+            sequence.push('ellipsis');
+        }
+    }
+
+    for (let i = 0; i < sequence.length; i += 1) {
+        if (sequence[i] === 'ellipsis') {
+            html += '<span class="history-pagination-ellipsis">...</span>';
+            continue;
+        }
+
+        const pageNumber = sequence[i];
+        const activeClass = pageNumber === currentPage ? 'active' : '';
         if (type === 'lend') {
-            html += `<button class="page-btn ${activeClass}" onclick="LendReturnController.changeLendHistoryPage(${i})">${i}</button>`;
+            html += `<button class="page-btn ${activeClass}" onclick="LendReturnController.changeLendHistoryPage(${pageNumber})">${pageNumber}</button>`;
         } else {
-            html += `<button class="page-btn ${activeClass}" onclick="LendReturnController.changeReturnHistoryPage(${i})">${i}</button>`;
+            html += `<button class="page-btn ${activeClass}" onclick="LendReturnController.changeReturnHistoryPage(${pageNumber})">${pageNumber}</button>`;
         }
     }
 
@@ -455,6 +749,11 @@ window.LendReturnController = {
         await this.loadLendHistory(1);
     },
 
+    async changeLendHistoryFilter(value) {
+        lendState.history.filter = value || 'all';
+        await this.loadLendHistory(1);
+    },
+
     async changeLendHistoryPage(page) {
         const targetPage = Number(page);
         if (targetPage < 1 || targetPage > lendState.history.totalPages) {
@@ -479,29 +778,67 @@ window.LendReturnController = {
     },
 
     async loadLendHistory(page = 1) {
-        const tbody = document.getElementById('lend-history-body');
-        if (!tbody) {
+        const { list, pagination } = getHistoryDom('lend');
+        if (!list) {
             return;
         }
 
+        setHistoryStatus('lend', '貸出履歴を読み込んでいます。', 'info');
+        list.innerHTML = renderHistoryLoadingState();
+        updateHistorySummary('lend', {
+            ...lendState.history,
+            currentPage: page
+        });
+        if (pagination) {
+            pagination.innerHTML = '';
+        }
+
         try {
-            const response = await API.lending.fetchLends({
+            const params = {
                 limit: lendState.history.itemsPerPage,
                 offset: (page - 1) * lendState.history.itemsPerPage
-            });
+            };
+            if (lendState.history.filter === 'active') {
+                params.returned = false;
+            } else if (lendState.history.filter === 'returned') {
+                params.returned = true;
+            }
+
+            const response = await API.lending.fetchLends(params);
 
             assignHistoryPage(lendState.history, response, page);
+            lendState.history.items = await enrichLendHistoryItemsWithAssetNames(lendState.history.items);
             renderLendHistory();
         } catch (error) {
             console.error('loadLendHistory error:', error);
-            tbody.innerHTML = '<tr><td colspan="5">読み込みに失敗しました</td></tr>';
+            list.innerHTML = renderHistoryEmptyState('貸出履歴を読み込めませんでした', '時間をおいて再度お試しください。');
+            setHistoryStatus('lend', '貸出履歴の読み込みに失敗しました。', 'error');
+            updateHistorySummary('lend', {
+                ...lendState.history,
+                totalItems: 0,
+                totalPages: 1,
+                currentPage: 1
+            });
+            if (pagination) {
+                pagination.innerHTML = '';
+            }
         }
     },
 
     async loadReturnHistory(page = 1) {
-        const tbody = document.getElementById('return-history-body');
-        if (!tbody) {
+        const { list, pagination } = getHistoryDom('return');
+        if (!list) {
             return;
+        }
+
+        setHistoryStatus('return', '返却履歴を読み込んでいます。', 'info');
+        list.innerHTML = renderHistoryLoadingState();
+        updateHistorySummary('return', {
+            ...returnState.history,
+            currentPage: page
+        });
+        if (pagination) {
+            pagination.innerHTML = '';
         }
 
         try {
@@ -514,7 +851,17 @@ window.LendReturnController = {
             renderReturnHistory();
         } catch (error) {
             console.error('loadReturnHistory error:', error);
-            tbody.innerHTML = '<tr><td colspan="5">読み込みに失敗しました</td></tr>';
+            list.innerHTML = renderHistoryEmptyState('返却履歴を読み込めませんでした', '時間をおいて再度お試しください。');
+            setHistoryStatus('return', '返却履歴の読み込みに失敗しました。', 'error');
+            updateHistorySummary('return', {
+                ...returnState.history,
+                totalItems: 0,
+                totalPages: 1,
+                currentPage: 1
+            });
+            if (pagination) {
+                pagination.innerHTML = '';
+            }
         }
     },
 };

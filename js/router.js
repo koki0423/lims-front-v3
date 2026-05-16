@@ -45,7 +45,7 @@ const routes = {
     },
     'reg-input-1': {
         path: 'modules/registration/step2.html',
-        title: '新規登録 > 基本',
+        title: '新規登録 > 管理方法選択 > 入力①',
         loader: loadRegistrationModule,
         init: async (module) => {
             await module.initRegistration('step1');
@@ -53,7 +53,7 @@ const routes = {
     },
     'reg-input-2': {
         path: 'modules/registration/step3.html',
-        title: '新規登録 > 詳細',
+        title: '新規登録 > 管理方法選択 > 入力②',
         loader: loadRegistrationModule,
         init: async (module) => {
             await module.initRegistration('step3');
@@ -62,7 +62,7 @@ const routes = {
 
     'reg-confirm': {
         path: 'modules/registration/confirm.html',
-        title: '新規登録 > 確認',
+        title: '新規登録 > 内容確認',
         loader: loadRegistrationModule,
         init: async (module) => {
             await module.initRegistration('confirm');

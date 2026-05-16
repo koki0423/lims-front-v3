@@ -11,12 +11,18 @@ const itemListState = {
     itemsPerPage: 20,
     totalPages: 1,
     totalItems: 0,
+    filterCache: {
+        status: '',
+        items: null
+    },
     label: {
         codeType: 'QR',
         tapeWidth: 9,
         halfcut: true
     },
 };
+
+const FILTER_FETCH_BATCH_SIZE = 200;
 
 // ステータス定義（JSONのstatus_idに対応）
 const STATUS_MAP = {
@@ -40,6 +46,75 @@ function getItemFilterFn() {
     return (item) => String(item.status_id || 1) === String(itemListState.currentFilter);
 }
 
+function hasActiveItemFilter() {
+    return itemListState.currentFilter !== null && itemListState.currentFilter !== '';
+}
+
+function resetItemFilterCache() {
+    itemListState.filterCache.status = '';
+    itemListState.filterCache.items = null;
+}
+
+async function fetchAllFilteredItems() {
+    if (
+        Array.isArray(itemListState.filterCache.items)
+        && String(itemListState.filterCache.status) === String(itemListState.currentFilter)
+    ) {
+        return itemListState.filterCache.items;
+    }
+
+    const allItems = [];
+    let offset = 0;
+    let pageGuard = 0;
+
+    while (pageGuard < 100) {
+        const params = {
+            limit: FILTER_FETCH_BATCH_SIZE,
+            offset
+        };
+
+        if (hasActiveItemFilter()) {
+            params.status = itemListState.currentFilter;
+            params.status_id = itemListState.currentFilter;
+        }
+
+        const response = await API.assets.fetchList(params);
+        const pageItems = Array.isArray(response)
+            ? response
+            : (Array.isArray(response?.items) ? response.items : []);
+
+        if (pageItems.length === 0) {
+            break;
+        }
+
+        allItems.push(...pageItems);
+
+        if (Array.isArray(response)) {
+            break;
+        }
+
+        const total = Number(response?.total);
+        if (Number.isFinite(total) && allItems.length >= total) {
+            break;
+        }
+
+        const nextOffset = Number(response?.next_offset);
+        if (Number.isFinite(nextOffset) && nextOffset > offset) {
+            offset = nextOffset;
+        } else if (pageItems.length < FILTER_FETCH_BATCH_SIZE) {
+            break;
+        } else {
+            offset += FILTER_FETCH_BATCH_SIZE;
+        }
+
+        pageGuard += 1;
+    }
+
+    itemListState.filterCache.status = itemListState.currentFilter;
+    itemListState.filterCache.items = allItems;
+    return allItems;
+}
+
 async function loadItemPage(page = 1) {
     const tbody = document.getElementById('item-list-body');
     const loader = document.getElementById('loading-spinner');
@@ -49,8 +124,9 @@ async function loadItemPage(page = 1) {
         offset: (safePage - 1) * itemListState.itemsPerPage
     };
 
-    if (itemListState.currentFilter !== null && itemListState.currentFilter !== '') {
+    if (hasActiveItemFilter()) {
         params.status = itemListState.currentFilter;
+        params.status_id = itemListState.currentFilter;
     }
 
     if (loader) {
@@ -60,12 +136,22 @@ async function loadItemPage(page = 1) {
     try {
         await ensureGenresLoaded();
 
-        const response = await API.assets.fetchList(params);
-        const normalized = normalizePageResponse(response, {
-            page: safePage,
-            itemsPerPage: itemListState.itemsPerPage,
-            localFilter: getItemFilterFn()
-        });
+        let normalized;
+
+        if (hasActiveItemFilter()) {
+            const filteredSource = await fetchAllFilteredItems();
+            normalized = normalizePageResponse(filteredSource, {
+                page: safePage,
+                itemsPerPage: itemListState.itemsPerPage,
+                localFilter: getItemFilterFn()
+            });
+        } else {
+            const response = await API.assets.fetchList(params);
+            normalized = normalizePageResponse(response, {
+                page: safePage,
+                itemsPerPage: itemListState.itemsPerPage
+            });
+        }
 
         itemListState.items = normalized.items;
         itemListState.totalItems = normalized.totalItems;
@@ -230,6 +316,7 @@ window.ItemListController = {
             itemListState.currentFilter = status;
         }
 
+        resetItemFilterCache();
         updateFilterButtonStyles();
         await loadItemPage(1);
     },
@@ -244,7 +331,7 @@ window.ItemListController = {
         this.edit(item.management_number || item.asset_id);
     },
 
-    // 編集モーダルを開く
+    // 詳細・編集モーダルを開く
     async edit(managementNumber) {
         try {
             const data = await API.assets.getPair(managementNumber);
@@ -254,6 +341,7 @@ window.ItemListController = {
             document.getElementById('edit-asset-id').value = asset.asset_id;
             document.getElementById('edit-name').value = master.name || '';
             document.getElementById('edit-code').value = asset.management_number;
+            document.getElementById('edit-serial').value = asset.serial || '-';
             document.getElementById('disp-current-location').value = asset.location || '-';
 
             const qtyInput = document.getElementById('edit-qty');
@@ -272,6 +360,8 @@ window.ItemListController = {
             statusSelect.disabled = false;
             locInput.disabled = false;
             notesInput.disabled = false;
+            qtyInput.style.backgroundColor = "#fff";
+            locInput.style.backgroundColor = "#fff";
 
             const isSerial = Boolean(asset.serial && asset.serial.trim() !== "");
             if (isSerial) {
@@ -336,6 +426,7 @@ window.ItemListController = {
             await API.assets.update(id, payload);
             alert('更新しました');
             this.closeModal();
+            resetItemFilterCache();
             await loadItemPage(itemListState.currentPage);
         } catch (error) {
             console.error(error);
@@ -477,6 +568,7 @@ function buildListPrintPayload(masterPayload, managementNumber, labelSetting) {
 export async function initItemList() {
     itemListState.currentFilter = '';
     itemListState.currentPage = 1;
+    resetItemFilterCache();
     updateFilterButtonStyles();
 
     const tbody = document.getElementById('item-list-body');
@@ -516,7 +608,7 @@ function renderList() {
                     <span class="status-badge ${statusObj.class}">${statusObj.name}</span>
                 </td>
                 <td style="text-align:center; padding: 12px 5px;">
-                    <button class="sm-btn" onclick="ItemListController.editByIndex(${index})">編集</button>
+                    <button class="sm-btn" onclick="ItemListController.editByIndex(${index})">詳細</button>
                     <button class="sm-btn" onclick="ItemListController.openLabelModalByIndex(${index})">ラベル印刷</button>
                 </td>
             </tr>

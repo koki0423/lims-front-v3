@@ -1,20 +1,26 @@
 <div class="screen-content">
     <h2>新規登録 > 管理方法選択 > 入力①</h2>
+    <div class="registration-step-indicator">
+        <span class="registration-step-chip active">1 基本情報</span>
+        <span class="registration-step-chip">2 追加情報</span>
+        <span class="registration-step-chip">3 確認</span>
+    </div>
+    <div class="registration-page-lead">
+        まずは備品の基本情報を入力します。詳細情報とラベル設定は次のページで入力します。
+    </div>
     <form id="form-reg-1">
-
-        <div style="padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
-            <label style="text-align: left;font-size: 1.1rem; color: #005014;font-weight: bold;">バーコードで自動入力</label>
-            <label style="display: block; text-align: left;margin-top: 5px; color: #333;">
-                YahooAPIを使用しているため、JANコードが存在しない場合もあります</label>
-            <div class="input-with-btn" style="margin-top: 10px;">
+        <div class="form-group registration-section-card">
+            <label>入力方法</label>
+            <p class="registration-note">バーコード検索が使える場合は、ここで基本情報を自動入力できます。</p>
+            <div class="input-with-btn registration-search-row">
                 <input type="text" id="jan-input" inputmode="numeric" autocomplete="off" autocapitalize="off"
                     spellcheck="false" pattern="[0-9]*" placeholder="スキャンするかJANコードを入力してください。ISBNコードも対応しています"
                     onkeypress="if(event.key === 'Enter') { event.preventDefault(); RegController.lookupJAN(); }" />
                 <button type="button" class="primary-btn" id="jan-search-btn"
                     onclick="RegController.lookupJAN()">検索</button>
             </div>
-
-            <div style="margin-top: 15px;">
+            <p class="registration-sub-note">YahooAPIを使用しているため、JANコードが存在しない場合があります。</p>
+            <div class="registration-actions-inline">
                 <button type="button" class="filter-btn" id="toggle-manual-btn"
                     onclick="RegController.toggleManualInput()">
                     バーコードがない場合はこちら（手動入力） ▼
@@ -22,40 +28,41 @@
             </div>
         </div>
 
-        <div id="manual-input-area" style="display: none;">
-            <div class="form-group">
-                <label>備品名*</label>
-                <input type="text" name="itemName" placeholder="例:ノートパソコン" required>
-            </div>
-            <div class="form-group">
-                <label>メーカー*</label>
-                <input type="text" name="maker" placeholder="例:Apple" required>
-            </div>
-            <div class="form-group">
-                <label>型番*</label>
-                <input type="text" name="model" placeholder="例:MacBookAir">
-            </div>
-
-            <div class="form-group" id="group-serial">
-                <label>シリアル番号* (不明な場合は "不明" と入力)</label>
-                <input type="text" name="serial" placeholder="例:W8009JEE5PC">
-            </div>
-
-            <div class="form-group" id="group-quantity" style="display:none;">
-                <label>数量*</label>
-                <input type="number" name="quantity" value="1" min="1" placeholder="例: 10">
-            </div>
-
-            <div class="form-group">
-                <label>備品ジャンル</label>
-                <select name="genre" id="reg-genre-select" required>
-                    <option value="">選択してください</option>
-                </select>
+        <div id="manual-input-area" class="form-group registration-section-card" style="display: none;">
+            <label>基本項目</label>
+            <p class="registration-note">個別管理ではシリアル番号、一括管理では数量を入力します。</p>
+            <div class="simple-common-grid registration-basic-grid">
+                <div>
+                    <label>備品名*</label>
+                    <input type="text" name="itemName" placeholder="例: ノートパソコン" required>
+                </div>
+                <div>
+                    <label>メーカー*</label>
+                    <input type="text" name="maker" placeholder="例: Apple" required>
+                </div>
+                <div>
+                    <label>型番*</label>
+                    <input type="text" name="model" placeholder="例: MacBook Air" required>
+                </div>
+                <div id="group-serial">
+                    <label>シリアル番号* (不明な場合は「不明」と入力)</label>
+                    <input type="text" name="serial" placeholder="例: W8009JEE5PC">
+                </div>
+                <div id="group-quantity" style="display:none;">
+                    <label>数量*</label>
+                    <input type="number" name="quantity" value="1" min="1" placeholder="例: 10">
+                </div>
+                <div>
+                    <label>備品ジャンル*</label>
+                    <select name="genre" id="reg-genre-select" required>
+                        <option value="">選択してください</option>
+                    </select>
+                </div>
             </div>
         </div>
     </form>
 
-    <div class="nav-buttons">
+    <div class="nav-buttons registration-nav-buttons">
         <button class="back-btn" onclick="Router.to('reg-select')">戻る</button>
         <button class="next-btn" onclick="RegController.saveStep1()">次へ</button>
     </div>

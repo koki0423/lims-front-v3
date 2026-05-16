@@ -1,35 +1,49 @@
 <div class="screen-content">
     <h2>貸出履歴</h2>
-    <div class="pagination-container">
-        <div class="rows-per-page">
-            <label>表示件数:</label>
-            <select onchange="LendReturnController.changeLendHistoryPerPage(this.value)">
+    <div class="registration-page-lead history-page-lead">
+        貸出中または貸出登録済みの履歴を参照します。表示件数の切替とページ移動で過去の記録を確認できます。
+    </div>
+
+    <div class="history-summary-grid">
+        <div class="batch-summary-card">
+            <span>総件数</span>
+            <strong id="lend-history-total">-</strong>
+        </div>
+        <div class="batch-summary-card">
+            <span>現在ページ</span>
+            <strong id="lend-history-page">-</strong>
+        </div>
+        <div class="batch-summary-card">
+            <span>表示範囲</span>
+            <strong id="lend-history-range">-</strong>
+        </div>
+    </div>
+
+    <div class="history-toolbar">
+        <div class="rows-per-page history-rows-per-page">
+            <label for="lend-history-per-page">表示件数</label>
+            <select id="lend-history-per-page" onchange="LendReturnController.changeLendHistoryPerPage(this.value)">
                 <option value="10">10件</option>
                 <option value="20" selected>20件</option>
                 <option value="50">50件</option>
                 <option value="100">100件</option>
             </select>
         </div>
-
-        <div id="lend-history-pagination" class="pagination-controls"></div>
+        <div class="rows-per-page history-rows-per-page">
+            <label for="lend-history-filter">状態</label>
+            <select id="lend-history-filter" onchange="LendReturnController.changeLendHistoryFilter(this.value)">
+                <option value="all" selected>すべて</option>
+                <option value="active">貸出中</option>
+                <option value="returned">返却済み</option>
+            </select>
+        </div>
+        <div id="lend-history-pagination" class="pagination-controls history-pagination"></div>
     </div>
 
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>備品番号</th>
-                <th>数量</th>
-                <th>貸出先</th>
-                <th>登録日</th>
-                <th>返却予定日</th>
-            </tr>
-        </thead>
-        <tbody id="lend-history-body">
-        </tbody>
-    </table>
+    <div id="lend-history-status" class="batch-status-banner info">履歴を読み込んでいます。</div>
 
-    <div
-        style="margin-top:10px; border-top:1px solid #eee; height:200px; background:repeating-linear-gradient(to bottom, transparent 0, transparent 29px, #eee 30px);">
+    <div class="history-list-shell history-table-shell">
+        <div id="lend-history-list" class="history-record-table-host"></div>
     </div>
 
     <div class="nav-buttons">

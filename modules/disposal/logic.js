@@ -21,6 +21,163 @@ async function loadNfcReader() {
     return import('../../js/nfcReader.js');
 }
 
+function displayDisposalValue(value, fallback = '-') {
+    if (value === null || value === undefined) {
+        return fallback;
+    }
+
+    const text = String(value).trim();
+    return text === '' ? fallback : text;
+}
+
+function formatDisposalDate(value) {
+    const dateObj = new Date(value);
+    if (Number.isNaN(dateObj.getTime())) {
+        return '-';
+    }
+
+    return `${dateObj.toLocaleDateString('ja-JP')} ${dateObj.toLocaleTimeString('ja-JP', {
+        hour: '2-digit',
+        minute: '2-digit'
+    })}`;
+}
+
+function syncDisposalHistoryPerPage() {
+    const perPage = document.getElementById('disposal-history-per-page');
+    if (perPage) {
+        perPage.value = String(historyState.itemsPerPage);
+    }
+}
+
+function updateDisposalHistorySummary() {
+    const total = document.getElementById('disposal-history-total');
+    const page = document.getElementById('disposal-history-page');
+    const range = document.getElementById('disposal-history-range');
+
+    if (total) {
+        total.textContent = `${historyState.totalItems}`;
+    }
+
+    if (page) {
+        page.textContent = `${historyState.currentPage} / ${Math.max(historyState.totalPages, 1)}`;
+    }
+
+    if (range) {
+        if (historyState.totalItems === 0) {
+            range.textContent = '0 - 0';
+            return;
+        }
+
+        const start = (historyState.currentPage - 1) * historyState.itemsPerPage + 1;
+        const end = Math.min(historyState.currentPage * historyState.itemsPerPage, historyState.totalItems);
+        range.textContent = `${start} - ${end}`;
+    }
+}
+
+function setDisposalHistoryStatus(message, type = 'info') {
+    const status = document.getElementById('disposal-history-status');
+    if (!status) {
+        return;
+    }
+
+    status.className = `batch-status-banner ${type}`;
+    status.textContent = message;
+}
+
+function renderDisposalHistoryLoadingState() {
+    return `
+        <div class="history-loading-grid">
+            <div class="history-loading-card"></div>
+            <div class="history-loading-card"></div>
+            <div class="history-loading-card"></div>
+        </div>
+    `;
+}
+
+function renderDisposalEmptyState(title, description) {
+    return `
+        <div class="history-empty-state">
+            <strong>${escapeHtml(title)}</strong>
+            <p>${escapeHtml(description)}</p>
+        </div>
+    `;
+}
+
+function renderDisposalHistoryRow(item) {
+    return `
+        <tr>
+            <td>${escapeHtml(displayDisposalValue(formatDisposalDate(item.disposed_at), '-'))}</td>
+            <td>${escapeHtml(displayDisposalValue(item.management_number))}</td>
+            <td>${escapeHtml(displayDisposalValue(item.quantity))}</td>
+            <td>${escapeHtml(displayDisposalValue(item.reason, '－'))}</td>
+            <td>${escapeHtml(displayDisposalValue(item.processed_by_id, '不明'))}</td>
+        </tr>
+    `;
+}
+
+function renderDisposalHistoryTable(items) {
+    return `
+        <table class="history-record-table">
+            <thead>
+                <tr>
+                    <th>廃棄日時</th>
+                    <th>管理番号</th>
+                    <th>数量</th>
+                    <th>廃棄理由</th>
+                    <th>担当者</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${items.map(renderDisposalHistoryRow).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function renderDisposalPagination() {
+    const paginationDiv = document.getElementById('disposal-history-pagination');
+    if (!paginationDiv) {
+        return;
+    }
+
+    if (historyState.totalPages <= 1) {
+        paginationDiv.innerHTML = '';
+        return;
+    }
+
+    const current = historyState.currentPage;
+    const totalPages = historyState.totalPages;
+    const sequence = [];
+
+    for (let i = 1; i <= totalPages; i += 1) {
+        const shouldShow = totalPages <= 7 || i === 1 || i === totalPages || Math.abs(current - i) <= 1;
+        if (shouldShow) {
+            sequence.push(i);
+            continue;
+        }
+
+        if (sequence[sequence.length - 1] !== 'ellipsis') {
+            sequence.push('ellipsis');
+        }
+    }
+
+    let html = `<button class="page-btn" ${current === 1 ? 'disabled' : ''} onclick="DisposalController.changePage(${current - 1})">＜</button>`;
+
+    for (let i = 0; i < sequence.length; i += 1) {
+        if (sequence[i] === 'ellipsis') {
+            html += '<span class="history-pagination-ellipsis">...</span>';
+            continue;
+        }
+
+        const pageNumber = sequence[i];
+        const activeClass = pageNumber === current ? 'active' : '';
+        html += `<button class="page-btn ${activeClass}" onclick="DisposalController.changePage(${pageNumber})">${pageNumber}</button>`;
+    }
+
+    html += `<button class="page-btn" ${current === totalPages ? 'disabled' : ''} onclick="DisposalController.changePage(${current + 1})">＞</button>`;
+    paginationDiv.innerHTML = html;
+}
+
 // 管理番号の正規化
 function normalizeMgmtInput(s) {
     if (!s) return '';
@@ -30,12 +187,21 @@ function normalizeMgmtInput(s) {
 }
 
 async function loadDisposalHistoryPage(page = 1) {
-    const tbody = document.getElementById('disposal-history-body');
-    const loader = document.getElementById('loading-spinner');
+    const list = document.getElementById('disposal-history-list');
+    const pagination = document.getElementById('disposal-history-pagination');
     const safePage = Math.max(1, Number(page) || 1);
 
-    if (loader) {
-        loader.style.display = 'block';
+    if (!list) {
+        return;
+    }
+
+    syncDisposalHistoryPerPage();
+    setDisposalHistoryStatus('廃棄履歴を読み込んでいます。', 'info');
+    list.innerHTML = renderDisposalHistoryLoadingState();
+    historyState.currentPage = safePage;
+    updateDisposalHistorySummary();
+    if (pagination) {
+        pagination.innerHTML = '';
     }
 
     try {
@@ -58,15 +224,17 @@ async function loadDisposalHistoryPage(page = 1) {
     } catch (error) {
         console.error('Fetch error:', error);
         historyState.items = [];
+        historyState.currentPage = 1;
         historyState.totalPages = 1;
         historyState.totalItems = 0;
-        if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="5" style="color:red; text-align:center;">履歴の取得に失敗しました</td></tr>`;
+        if (list) {
+            list.innerHTML = renderDisposalEmptyState('廃棄履歴を読み込めませんでした', '時間をおいて再度お試しください。');
         }
-    } finally {
-        if (loader) {
-            loader.style.display = 'none';
+        if (pagination) {
+            pagination.innerHTML = '';
         }
+        updateDisposalHistorySummary();
+        setDisposalHistoryStatus('廃棄履歴の読み込みに失敗しました。', 'error');
     }
 }
 
@@ -234,62 +402,33 @@ function restoreFormData(form, data) {
 }
 
 export async function initDisposalHistory() {
-    const tbody = document.getElementById('disposal-history-body');
-    if (tbody) {
-        tbody.innerHTML = '';
+    const list = document.getElementById('disposal-history-list');
+    if (list) {
+        list.innerHTML = '';
     }
 
     await loadDisposalHistoryPage(1);
 }
 
 function renderTable() {
-    const tbody = document.getElementById('disposal-history-body');
-    const paginationDiv = document.getElementById('pagination-controls');
-    if (!tbody) return;
+    const list = document.getElementById('disposal-history-list');
+    const paginationDiv = document.getElementById('disposal-history-pagination');
+    if (!list) return;
+
+    syncDisposalHistoryPerPage();
+    updateDisposalHistorySummary();
 
     if (historyState.items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">廃棄履歴はありません</td></tr>';
+        list.innerHTML = renderDisposalEmptyState('廃棄履歴はありません', '表示条件に一致する廃棄記録はありません。');
         if (paginationDiv) {
             paginationDiv.innerHTML = '';
         }
+        setDisposalHistoryStatus('表示できる廃棄履歴はありません。', 'info');
         return;
     }
 
-    tbody.innerHTML = historyState.items.map((item) => {
-        const dateObj = new Date(item.disposed_at);
-        const dateStr = Number.isNaN(dateObj.getTime())
-            ? '-'
-            : dateObj.toLocaleDateString('ja-JP') + ' ' + dateObj.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    list.innerHTML = renderDisposalHistoryTable(historyState.items);
+    setDisposalHistoryStatus(`${historyState.totalItems}件の廃棄履歴を表示しています。`, 'success');
 
-        return `
-            <tr>
-                <td style="padding: 12px 5px;">${escapeHtml(dateStr)}</td>
-                <td style="padding: 12px 5px;">${escapeHtml(item.management_number || '-')}</td>
-                <td style="padding: 12px 5px;">${escapeHtml(item.quantity)}</td>
-                <td style="padding: 12px 5px;">${escapeHtml(item.reason || '－')}</td>
-                <td style="padding: 12px 5px;">${escapeHtml(item.processed_by_id || '不明')}</td>
-            </tr>
-        `;
-    }).join('');
-
-    if (!paginationDiv) {
-        return;
-    }
-
-    if (historyState.totalPages <= 1) {
-        paginationDiv.innerHTML = '';
-        return;
-    }
-
-    let html = '';
-    const current = historyState.currentPage;
-    html += `<button class="page-btn" ${current === 1 ? 'disabled' : ''} onclick="DisposalController.changePage(${current - 1})">＜</button>`;
-
-    for (let i = 1; i <= historyState.totalPages; i++) {
-        const activeClass = i === current ? 'active' : '';
-        html += `<button class="page-btn ${activeClass}" onclick="DisposalController.changePage(${i})">${i}</button>`;
-    }
-
-    html += `<button class="page-btn" ${current === historyState.totalPages ? 'disabled' : ''} onclick="DisposalController.changePage(${current + 1})">＞</button>`;
-    paginationDiv.innerHTML = html;
+    renderDisposalPagination();
 }

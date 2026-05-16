@@ -1,33 +1,40 @@
 <div class="screen-content">
-    <h2>廃棄履歴一覧</h2>
+    <h2>廃棄履歴</h2>
+    <div class="registration-page-lead history-page-lead">
+        廃棄済みの履歴を参照します。表示件数の切替とページ移動で過去の記録を確認できます。
+    </div>
 
-    <div style="padding: 10px; border-radius: 4px;">
-        <div class="pagination-container">
-            <div class="rows-per-page">
-                <label>表示件数:</label>
-                <select onchange="DisposalController.changePerPage(this.value)">
-                    <option value="10">10件</option>
-                    <option value="20" selected>20件</option>
-                    <option value="50">50件</option>
-                </select>
-            </div>
-            <div id="pagination-controls" class="pagination-controls"></div>
+    <div class="history-summary-grid">
+        <div class="batch-summary-card">
+            <span>総件数</span>
+            <strong id="disposal-history-total">-</strong>
         </div>
+        <div class="batch-summary-card">
+            <span>現在ページ</span>
+            <strong id="disposal-history-page">-</strong>
+        </div>
+        <div class="batch-summary-card">
+            <span>表示範囲</span>
+            <strong id="disposal-history-range">-</strong>
+        </div>
+    </div>
 
-        <table class="data-table" style="width: 100%;">
-            <thead>
-                <tr>
-                    <th>廃棄日時</th>
-                    <th>管理番号</th>
-                    <th>数量</th>
-                    <th>廃棄理由</th>
-                    <th>担当者</th>
-                </tr>
-            </thead>
-            <tbody id="disposal-history-body"></tbody>
-        </table>
+    <div class="history-toolbar">
+        <div class="rows-per-page history-rows-per-page">
+            <label for="disposal-history-per-page">表示件数</label>
+            <select id="disposal-history-per-page" onchange="DisposalController.changePerPage(this.value)">
+                <option value="10">10件</option>
+                <option value="20" selected>20件</option>
+                <option value="50">50件</option>
+            </select>
+        </div>
+        <div id="disposal-history-pagination" class="pagination-controls history-pagination"></div>
+    </div>
 
-        <div id="loading-spinner" style="display:none; text-align:center; padding:20px;">読み込み中...</div>
+    <div id="disposal-history-status" class="batch-status-banner info">履歴を読み込んでいます。</div>
+
+    <div class="history-list-shell history-table-shell">
+        <div id="disposal-history-list" class="history-record-table-host"></div>
     </div>
 
     <div class="nav-buttons">

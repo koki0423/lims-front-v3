@@ -2636,6 +2636,26 @@ function createConfirmRow(label, value) {
     return row;
 }
 
+function getConfirmDisplayValue(value, fallback = '-') {
+    const normalized = cleanCell(value);
+    return normalized === '' ? fallback : normalized;
+}
+
+function createConfirmSection(title, rows) {
+    const section = document.createElement('section');
+    section.className = 'registration-confirm-card';
+
+    const titleEl = document.createElement('h3');
+    titleEl.textContent = title;
+    section.appendChild(titleEl);
+
+    for (let i = 0; i < rows.length; i += 1) {
+        section.appendChild(createConfirmRow(rows[i][0], rows[i][1]));
+    }
+
+    return section;
+}
+
 // -------------------------------------
 // 確認画面描画 (個別登録用)
 // -------------------------------------
@@ -2648,20 +2668,35 @@ function renderConfirm() {
     const codeTypeLabel = (d.labelCodeType === 'CODE128') ? 'バーコード(Code128)' : 'QRコード';
     const tapeWidth = d.labelTapeWidth || '9';
     const halfcutOn = true;
+    const basicRows = [
+        ['管理方法', typeLabel],
+        ['備品名', getConfirmDisplayValue(d.itemName)],
+        ['メーカー', getConfirmDisplayValue(d.maker)],
+        ['型番', getConfirmDisplayValue(d.model)],
+        ['備品ジャンル', getConfirmDisplayValue(d.genre)]
+    ];
+
+    if (regState.type === 'individual') {
+        basicRows.splice(4, 0, ['シリアル番号', getConfirmDisplayValue(d.serial)]);
+    } else {
+        basicRows.splice(4, 0, ['個数', getConfirmDisplayValue(d.quantity, '1')]);
+    }
+
+    const detailRows = [
+        ['保管場所', getConfirmDisplayValue(d.location)],
+        ['購入日', getConfirmDisplayValue(d.purchaseDate)],
+        ['登録者', getConfirmDisplayValue(d.registrant)],
+        ['備考', getConfirmDisplayValue(d.remarks)]
+    ];
+    const labelRows = [
+        ['ラベル種別', codeTypeLabel],
+        ['テープ幅', `${tapeWidth} mm`],
+        ['ハーフカット', halfcutOn ? 'あり' : 'なし']
+    ];
 
     display.replaceChildren(
-        createConfirmRow('管理方法', typeLabel),
-        createConfirmRow('備品名', d.itemName || ''),
-        createConfirmRow('メーカー', d.maker || ''),
-        createConfirmRow('型番', d.model || '-'),
-        createConfirmRow('シリアル', d.serial || '-'),
-        createConfirmRow('ジャンル', d.genre || ''),
-        createConfirmRow('保管場所', d.location || ''),
-        createConfirmRow('購入日', d.purchaseDate || ''),
-        createConfirmRow('登録者', d.registrant || ''),
-        createConfirmRow('備考', d.remarks || ''),
-        createConfirmRow('ラベル種別', codeTypeLabel),
-        createConfirmRow('テープ幅', `${tapeWidth} mm`),
-        createConfirmRow('ハーフカット', halfcutOn ? 'あり' : 'なし')
+        createConfirmSection('基本情報', basicRows),
+        createConfirmSection('追加情報', detailRows),
+        createConfirmSection('ラベル設定', labelRows)
     );
 }

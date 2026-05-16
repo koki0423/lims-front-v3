@@ -1,51 +1,67 @@
 <div class="screen-content">
-    <h2>新規登録 > 管理方法選択 > 入力① > 入力②</h2>
+    <h2>新規登録 > 管理方法選択 > 入力②</h2>
+    <div class="registration-step-indicator">
+        <span class="registration-step-chip">1 基本情報</span>
+        <span class="registration-step-chip active">2 追加情報</span>
+        <span class="registration-step-chip">3 確認</span>
+    </div>
+    <div class="registration-page-lead">
+        保管情報、登録者、ラベル設定を入力します。入力内容は次の画面で確認できます。
+    </div>
     <form id="form-reg-2">
-        <div class="form-group">
-            <label>標準保管場所 または 所有者*</label>
-            <input type="text" name="location" placeholder="例:実験室" required>
-        </div>
-        <div class="form-group">
-            <label>購入日*</label>
-            <input type="date" name="purchaseDate" required>
-        </div>
-        <div class="form-group">
-            <label>登録者*</label>
-            <div class="input-with-btn">
-                <input type="text" name="registrant" placeholder="例:AB12345" required>
-                <button type="button" class="nfc-btn" onclick="RegController.NfcRead()">NFC入力</button>
+        <div class="form-group registration-section-card">
+            <label>追加情報</label>
+            <div class="simple-common-grid registration-detail-grid">
+                <div>
+                    <label>標準保管場所 または 所有者*</label>
+                    <input type="text" name="location" placeholder="例: 実験室" required>
+                </div>
+                <div>
+                    <label>購入日*</label>
+                    <input type="date" name="purchaseDate" required>
+                </div>
+                <div class="registration-grid-full">
+                    <label>登録者*</label>
+                    <div class="input-with-btn">
+                        <input type="text" name="registrant" placeholder="例: AB12345" required>
+                        <button type="button" class="nfc-btn" onclick="RegController.NfcRead()">NFC入力</button>
+                    </div>
+                </div>
+                <div class="registration-grid-full">
+                    <label>備考</label>
+                    <textarea name="remarks" rows="3" placeholder="補足事項があれば入力してください"></textarea>
+                </div>
             </div>
         </div>
-        <div class="form-group">
-            <label>備考</label>
-            <textarea name="remarks" rows="3"></textarea>
-        </div>
-        <div class="form-group">
+
+        <div class="form-group registration-section-card">
             <label>ラベル設定</label>
-            <div class="info-row">
-                <span class="info-label">コード種別</span>
-                <select name="labelCodeType">
-                    <option value="QR" selected>QRコード</option>
-                    <option value="CODE128">バーコード(Code128)</option>
-                </select>
-            </div>
-            <div class="info-row" style="margin-top: 8px;">
-                <span class="info-label">テープ幅</span>
-                <select name="labelTapeWidth">
-                <option value="9" selected>9 mm</option>
-                <option value="12">12 mm</option>
-                <option value="18">18 mm</option>
-                </select>
-            </div>
-            <div class="info-row" style="margin-top: 8px;" >
-                <label>
-                    <input type="checkbox" name="labelHalfcut" checked disabled>
-                    ハーフカットを有効にする
-                </label>
+            <div class="simple-common-grid registration-detail-grid">
+                <div>
+                    <label>コード種別</label>
+                    <select name="labelCodeType">
+                        <option value="QR" selected>QRコード</option>
+                        <option value="CODE128">バーコード(Code128)</option>
+                    </select>
+                </div>
+                <div>
+                    <label>テープ幅</label>
+                    <select name="labelTapeWidth">
+                        <option value="9" selected>9 mm</option>
+                        <option value="12">12 mm</option>
+                        <option value="18">18 mm</option>
+                    </select>
+                </div>
+                <div class="registration-grid-full registration-inline-check">
+                    <label>
+                        <input type="checkbox" name="labelHalfcut" checked disabled>
+                        ハーフカットを有効にする
+                    </label>
+                </div>
             </div>
         </div>
     </form>
-    <div class="nav-buttons">
+    <div class="nav-buttons registration-nav-buttons">
         <button class="back-btn" onclick="Router.to('reg-input-1')">戻る</button>
         <button class="next-btn" onclick="RegController.saveStep2()">次へ</button>
     </div>
