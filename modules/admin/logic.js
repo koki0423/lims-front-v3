@@ -28,10 +28,12 @@ window.AdminController = {
                 return;
             }
 
-            input.value = "error";
+            if (!result.cancelled) {
+                alert('NFC読み取り失敗: ' + result.error);
+            }
         } catch (err) {
             console.error("scan error:", err);
-            if (input) input.value = "error";
+            alert('NFC読み取り中にエラーが発生しました: ' + (err instanceof Error ? err.message : String(err)));
         }
     },
 

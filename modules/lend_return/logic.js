@@ -557,7 +557,7 @@ window.LendReturnController = {
             alert('NFC読み取り失敗: ' + result.error);
         } catch (error) {
             console.error('scan error:', error);
-            alert('NFC読み取り中にエラーが発生しました');
+            alert('NFC読み取り中にエラーが発生しました: ' + (error instanceof Error ? error.message : String(error)));
         }
     },
 

@@ -271,14 +271,12 @@ window.DisposalController = {
                 return;
             }
 
-            input.value = "error";
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            input.dispatchEvent(new Event("change", { bubbles: true }));
+            input.value = "";
+            alert('NFC読み取り失敗: ' + result.error);
         } catch (err) {
             console.error("scan error:", err);
-            input.value = "error";
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            input.dispatchEvent(new Event("change", { bubbles: true }));
+            input.value = "";
+            alert('NFC読み取り中にエラーが発生しました: ' + (err instanceof Error ? err.message : String(err)));
         }
     },
 

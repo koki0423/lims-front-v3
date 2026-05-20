@@ -2211,7 +2211,7 @@ window.RegController = {
             const { scanStudentIdWithRetry } = await loadNfcReader();
             const result = await scanStudentIdWithRetry(9, 2000);
             if (!result?.ok || !result.studentId) {
-                throw new Error('学生証の読み取りに失敗しました');
+                throw new Error(result?.error || '学生証の読み取りに失敗しました');
             }
 
             input.value = result.studentId;
@@ -2219,7 +2219,7 @@ window.RegController = {
         } catch (err) {
             console.error('scan error:', err);
             input.value = '';
-            input.setCustomValidity('NFCの読み取りに失敗しました。手入力するか再度お試しください。');
+            input.setCustomValidity(err instanceof Error ? err.message : 'NFCの読み取りに失敗しました。');
             input.reportValidity();
             input.focus();
         }
