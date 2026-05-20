@@ -7,10 +7,16 @@ const loadLendReturnModule = () => import('../modules/lend_return/logic.js');
 const loadSearchModule = () => import('../modules/search/logic.js');
 const loadCommonModule = () => import('../modules/common/logic.js');
 const loadAdminModule = () => import('../modules/admin/logic.js');
+const loadMainMenuModule = () => import('../modules/main/logic.js');
 
 // ルート定義: 画面IDとファイルパス、初期化処理の紐付け
 const routes = {
-    'main-menu': { path: 'modules/main/menu.html', title: 'メインメニュー' },
+    'main-menu': {
+        path: 'modules/main/menu.html',
+        title: 'メインメニュー',
+        loader: loadMainMenuModule,
+        init: (module) => module.initMainMenu()
+    },
 
     // === 新規登録 ===
     'reg-select': { path: 'modules/registration/step1.html', title: '新規登録', loader: loadRegistrationModule },
