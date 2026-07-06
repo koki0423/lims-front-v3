@@ -12,12 +12,22 @@ const lendState = {
     data: {},
     history: {
         items: [],
+        sourceItems: null,
+        sourceCacheKey: '',
         currentPage: 1,
         itemsPerPage: 20,
         filter: 'all',
         totalPages: 1,
         totalItems: 0,
-        loading: false
+        loading: false,
+        detailItem: null,
+        query: {
+            managementNumber: '',
+            assetName: '',
+            borrower: '',
+            dateFrom: '',
+            dateTo: ''
+        }
     }
 };
 
@@ -27,11 +37,21 @@ const returnState = {
     inputData: {},
     history: {
         items: [],
+        sourceItems: null,
+        sourceCacheKey: '',
         currentPage: 1,
         itemsPerPage: 20,
         totalPages: 1,
         totalItems: 0,
-        loading: false
+        loading: false,
+        detailItem: null,
+        query: {
+            managementNumber: '',
+            assetName: '',
+            borrower: '',
+            dateFrom: '',
+            dateTo: ''
+        }
     }
 };
 
@@ -42,6 +62,10 @@ const lendAssetDetailsCache = new Map();
 const lendAssetDetailsRequestCache = new Map();
 const lendRecordCache = new Map();
 const lendRecordRequestCache = new Map();
+const historyFilterUiState = {
+    lend: false,
+    return: false
+};
 const LEND_HISTORY_VIEW_STATE_KEY = 'lend-history-view';
 const RETURN_HISTORY_VIEW_STATE_KEY = 'return-history-view';
 const LEND_RETURN_FEEDBACK_IDS = [
@@ -56,6 +80,17 @@ async function loadNfcReader() {
     return import('../../js/nfcReader.js');
 }
 
+function createHistoryQuery(overrides = {}) {
+    return {
+        managementNumber: '',
+        assetName: '',
+        borrower: '',
+        dateFrom: '',
+        dateTo: '',
+        ...overrides
+    };
+}
+
 function restoreLendHistoryState() {
     const persisted = loadViewState(LEND_HISTORY_VIEW_STATE_KEY, {});
     lendState.history.currentPage = Math.max(1, Number(persisted.currentPage) || 1);
@@ -63,13 +98,15 @@ function restoreLendHistoryState() {
         ? Number(persisted.itemsPerPage)
         : 20;
     lendState.history.filter = persisted.filter || 'all';
+    lendState.history.query = createHistoryQuery(persisted.query);
 }
 
 function persistLendHistoryState() {
     saveViewState(LEND_HISTORY_VIEW_STATE_KEY, {
         currentPage: lendState.history.currentPage,
         itemsPerPage: lendState.history.itemsPerPage,
-        filter: lendState.history.filter
+        filter: lendState.history.filter,
+        query: lendState.history.query
     });
 }
 
@@ -79,12 +116,14 @@ function restoreReturnHistoryState() {
     returnState.history.itemsPerPage = [10, 20, 50, 100].includes(Number(persisted.itemsPerPage))
         ? Number(persisted.itemsPerPage)
         : 20;
+    returnState.history.query = createHistoryQuery(persisted.query);
 }
 
 function persistReturnHistoryState() {
     saveViewState(RETURN_HISTORY_VIEW_STATE_KEY, {
         currentPage: returnState.history.currentPage,
-        itemsPerPage: returnState.history.itemsPerPage
+        itemsPerPage: returnState.history.itemsPerPage,
+        query: returnState.history.query
     });
 }
 
@@ -187,6 +226,82 @@ function displayHistoryValue(value, fallback = '-') {
 
     const text = String(value).trim();
     return text === '' ? fallback : text;
+}
+
+function normalizeFilterText(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .trim()
+        .toLowerCase();
+}
+
+function includesFilterText(value, query) {
+    const safeQuery = normalizeFilterText(query);
+    if (!safeQuery) {
+        return true;
+    }
+
+    return normalizeFilterText(value).includes(safeQuery);
+}
+
+function toDateOnlyValue(value) {
+    const safeValue = displayHistoryValue(value, '');
+    if (!safeValue) {
+        return '';
+    }
+
+    if (typeof safeValue === 'string' && safeValue.length >= 10) {
+        return safeValue.slice(0, 10);
+    }
+
+    const date = new Date(safeValue);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+
+    return date.toISOString().slice(0, 10);
+}
+
+function matchesDateRange(value, dateFrom, dateTo) {
+    const dateValue = toDateOnlyValue(value);
+    if (!dateValue) {
+        return !dateFrom && !dateTo;
+    }
+
+    if (dateFrom && dateValue < dateFrom) {
+        return false;
+    }
+    if (dateTo && dateValue > dateTo) {
+        return false;
+    }
+
+    return true;
+}
+
+function hasActiveHistoryQuery(query) {
+    return Boolean(
+        query?.managementNumber
+        || query?.assetName
+        || query?.borrower
+        || query?.dateFrom
+        || query?.dateTo
+    );
+}
+
+function clearHistorySourceCache(type) {
+    const target = type === 'return' ? returnState.history : lendState.history;
+    target.sourceItems = null;
+    target.sourceCacheKey = '';
+}
+
+async function showLendReturnComplete(options) {
+    await import('../common/logic.js');
+    if (window.CommonController?.showComplete) {
+        await window.CommonController.showComplete(options);
+        return;
+    }
+
+    await Router.to('complete');
 }
 
 function getActiveFeedbackId() {
@@ -386,6 +501,90 @@ async function enrichReturnHistoryItems(items) {
     });
 }
 
+async function fetchAllHistoryItems(fetcher, params = {}) {
+    const allItems = [];
+    let offset = 0;
+    let pageGuard = 0;
+
+    while (pageGuard < 100) {
+        const response = await fetcher({
+            ...params,
+            limit: 200,
+            offset
+        });
+        const pageItems = Array.isArray(response)
+            ? response
+            : (Array.isArray(response?.items) ? response.items : []);
+
+        if (pageItems.length === 0) {
+            break;
+        }
+
+        allItems.push(...pageItems);
+
+        if (Array.isArray(response)) {
+            break;
+        }
+
+        const total = Number(response?.total);
+        if (Number.isFinite(total) && allItems.length >= total) {
+            break;
+        }
+
+        const nextOffset = Number(response?.next_offset);
+        if (Number.isFinite(nextOffset) && nextOffset > offset) {
+            offset = nextOffset;
+        } else if (pageItems.length < 200) {
+            break;
+        } else {
+            offset += 200;
+        }
+
+        pageGuard += 1;
+    }
+
+    return allItems;
+}
+
+async function getLendHistorySourceItems() {
+    const cacheKey = lendState.history.filter;
+    if (
+        Array.isArray(lendState.history.sourceItems)
+        && lendState.history.sourceCacheKey === cacheKey
+    ) {
+        return lendState.history.sourceItems;
+    }
+
+    const params = {};
+    if (lendState.history.filter === 'active') {
+        params.returned = false;
+    } else if (lendState.history.filter === 'returned') {
+        params.returned = true;
+    }
+
+    const items = await fetchAllHistoryItems(API.lending.fetchLends, params);
+    const enrichedItems = await enrichLendItemsWithAssetDetails(items);
+    lendState.history.sourceItems = enrichedItems;
+    lendState.history.sourceCacheKey = cacheKey;
+    return enrichedItems;
+}
+
+async function getReturnHistorySourceItems() {
+    const cacheKey = 'all';
+    if (
+        Array.isArray(returnState.history.sourceItems)
+        && returnState.history.sourceCacheKey === cacheKey
+    ) {
+        return returnState.history.sourceItems;
+    }
+
+    const items = await fetchAllHistoryItems(API.lending.fetchReturns);
+    const enrichedItems = await enrichReturnHistoryItems(items);
+    returnState.history.sourceItems = enrichedItems;
+    returnState.history.sourceCacheKey = cacheKey;
+    return enrichedItems;
+}
+
 function getHistoryViewConfig(type) {
     if (type === 'return') {
         return {
@@ -397,6 +596,20 @@ function getHistoryViewConfig(type) {
             rangeId: 'return-history-range',
             perPageId: 'return-history-per-page',
             filterId: null,
+            queryFormId: 'return-history-query-form',
+            queryToggleId: 'return-history-query-toggle-btn',
+            queryIds: {
+                managementNumber: 'return-history-query-mgmt',
+                assetName: 'return-history-query-name',
+                borrower: 'return-history-query-borrower',
+                dateFrom: 'return-history-date-from',
+                dateTo: 'return-history-date-to',
+                apply: 'return-history-apply-btn',
+                clear: 'return-history-clear-btn'
+            },
+            detailModalId: 'return-history-detail-modal',
+            detailContentId: 'return-history-detail-content',
+            detailCloseId: 'return-history-detail-close-btn',
             emptyTitle: '返却履歴がありません',
             emptyDescription: '返却処理がまだ登録されていないか、表示対象の履歴がありません。'
         };
@@ -411,6 +624,20 @@ function getHistoryViewConfig(type) {
         rangeId: 'lend-history-range',
         perPageId: 'lend-history-per-page',
         filterId: 'lend-history-filter',
+        queryFormId: 'lend-history-query-form',
+        queryToggleId: 'lend-history-query-toggle-btn',
+        queryIds: {
+            managementNumber: 'lend-history-query-mgmt',
+            assetName: 'lend-history-query-name',
+            borrower: 'lend-history-query-borrower',
+            dateFrom: 'lend-history-date-from',
+            dateTo: 'lend-history-date-to',
+            apply: 'lend-history-apply-btn',
+            clear: 'lend-history-clear-btn'
+        },
+        detailModalId: 'lend-history-detail-modal',
+        detailContentId: 'lend-history-detail-content',
+        detailCloseId: 'lend-history-detail-close-btn',
         emptyTitle: '貸出履歴がありません',
         emptyDescription: '貸出処理がまだ登録されていないか、表示対象の履歴がありません。'
     };
@@ -427,7 +654,19 @@ function getHistoryDom(type) {
         page: document.getElementById(config.pageId),
         range: document.getElementById(config.rangeId),
         perPage: document.getElementById(config.perPageId),
-        filter: config.filterId ? document.getElementById(config.filterId) : null
+        filter: config.filterId ? document.getElementById(config.filterId) : null,
+        queryForm: document.getElementById(config.queryFormId),
+        queryToggle: document.getElementById(config.queryToggleId),
+        queryManagementNumber: document.getElementById(config.queryIds.managementNumber),
+        queryAssetName: document.getElementById(config.queryIds.assetName),
+        queryBorrower: document.getElementById(config.queryIds.borrower),
+        queryDateFrom: document.getElementById(config.queryIds.dateFrom),
+        queryDateTo: document.getElementById(config.queryIds.dateTo),
+        queryApply: document.getElementById(config.queryIds.apply),
+        queryClear: document.getElementById(config.queryIds.clear),
+        detailModal: document.getElementById(config.detailModalId),
+        detailContent: document.getElementById(config.detailContentId),
+        detailClose: document.getElementById(config.detailCloseId)
     };
 }
 
@@ -455,6 +694,17 @@ function setHistoryControlsLoading(type, isLoading) {
     if (config.filterId) {
         selectors.push(`#${config.filterId}`);
     }
+    selectors.push(
+        `#${config.queryToggleId}`,
+        `#${config.queryIds.managementNumber}`,
+        `#${config.queryIds.assetName}`,
+        `#${config.queryIds.borrower}`,
+        `#${config.queryIds.dateFrom}`,
+        `#${config.queryIds.dateTo}`,
+        `#${config.queryIds.apply}`,
+        `#${config.queryIds.clear}`,
+        `#${config.listId} .sm-btn`
+    );
 
     if (type === 'lend') {
         lendState.history.loading = isLoading;
@@ -463,6 +713,102 @@ function setHistoryControlsLoading(type, isLoading) {
     }
 
     setControlsDisabled(selectors, isLoading);
+}
+
+function getHistoryState(type) {
+    return type === 'return' ? returnState.history : lendState.history;
+}
+
+function syncHistoryQueryInputs(type, historyState) {
+    const dom = getHistoryDom(type);
+    if (dom.queryManagementNumber) {
+        dom.queryManagementNumber.value = historyState.query.managementNumber || '';
+    }
+    if (dom.queryAssetName) {
+        dom.queryAssetName.value = historyState.query.assetName || '';
+    }
+    if (dom.queryBorrower) {
+        dom.queryBorrower.value = historyState.query.borrower || '';
+    }
+    if (dom.queryDateFrom) {
+        dom.queryDateFrom.value = historyState.query.dateFrom || '';
+    }
+    if (dom.queryDateTo) {
+        dom.queryDateTo.value = historyState.query.dateTo || '';
+    }
+}
+
+function syncHistoryFilterPanel(type, historyState) {
+    const dom = getHistoryDom(type);
+    if (!dom.queryForm || !dom.queryToggle) {
+        return;
+    }
+
+    const isExpanded = historyFilterUiState[type] === true;
+    dom.queryForm.hidden = !isExpanded;
+    dom.queryToggle.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    dom.queryToggle.textContent = `${isExpanded ? '絞り込み条件を閉じる' : '絞り込み条件を開く'}${hasActiveHistoryQuery(historyState.query) ? '（適用中）' : ''}`;
+}
+
+function setHistoryFilterExpanded(type, isExpanded) {
+    historyFilterUiState[type] = isExpanded;
+    syncHistoryFilterPanel(type, getHistoryState(type));
+}
+
+function toggleHistoryFilterPanel(type) {
+    setHistoryFilterExpanded(type, !historyFilterUiState[type]);
+}
+
+function readHistoryQueryFromInputs(type) {
+    const dom = getHistoryDom(type);
+    return createHistoryQuery({
+        managementNumber: dom.queryManagementNumber ? dom.queryManagementNumber.value.trim() : '',
+        assetName: dom.queryAssetName ? dom.queryAssetName.value.trim() : '',
+        borrower: dom.queryBorrower ? dom.queryBorrower.value.trim() : '',
+        dateFrom: dom.queryDateFrom ? dom.queryDateFrom.value : '',
+        dateTo: dom.queryDateTo ? dom.queryDateTo.value : ''
+    });
+}
+
+function filterLendHistoryItems(items) {
+    const query = lendState.history.query;
+    return (Array.isArray(items) ? items : []).filter((item) => {
+        if (lendState.history.filter === 'active' && isLendReturned(item)) {
+            return false;
+        }
+        if (lendState.history.filter === 'returned' && !isLendReturned(item)) {
+            return false;
+        }
+
+        if (!includesFilterText(getLendManagementNumber(item), query.managementNumber)) {
+            return false;
+        }
+        if (!includesFilterText(getLendAssetName(item), query.assetName)) {
+            return false;
+        }
+        if (!includesFilterText(item.borrower_id || item.borrower || '', query.borrower)) {
+            return false;
+        }
+
+        return matchesDateRange(item.lent_at || item.created_at || '', query.dateFrom, query.dateTo);
+    });
+}
+
+function filterReturnHistoryItems(items) {
+    const query = returnState.history.query;
+    return (Array.isArray(items) ? items : []).filter((item) => {
+        if (!includesFilterText(getLendManagementNumber(item), query.managementNumber)) {
+            return false;
+        }
+        if (!includesFilterText(getLendAssetName(item), query.assetName)) {
+            return false;
+        }
+        if (!includesFilterText(item.borrower_id || item.borrower || '', query.borrower)) {
+            return false;
+        }
+
+        return matchesDateRange(item.returned_at || item.processed_at || item.returned_on || '', query.dateFrom, query.dateTo);
+    });
 }
 
 function updateHistorySummary(type, historyState) {
@@ -526,16 +872,99 @@ function renderHistoryField(label, value) {
     `;
 }
 
-function renderLendHistoryRow(item) {
+function renderHistoryDetailGrid(rows) {
+    return `
+        <div class="history-detail-grid">
+            ${rows.map(([label, value]) => renderHistoryField(label, value)).join('')}
+        </div>
+    `;
+}
+
+let activeHistoryDetailContext = null;
+
+function openHistoryDetailModal(type) {
+    const historyState = getHistoryState(type);
+    const dom = getHistoryDom(type);
+    if (!historyState.detailItem || !dom.detailModal || !dom.detailContent) {
+        return;
+    }
+
+    const item = historyState.detailItem;
+    if (type === 'lend') {
+        const returned = isLendReturned(item);
+        dom.detailContent.innerHTML = `
+            <div class="history-detail-status ${returned ? 'is-complete' : 'is-active'}">${returned ? '返却済み' : '貸出中'}</div>
+            ${renderHistoryDetailGrid([
+                ['貸出番号', getLendKey(item)],
+                ['備品番号', getLendManagementNumber(item)],
+                ['備品名', getLendAssetName(item) || '備品名未取得'],
+                ['シリアル番号', getLendAssetSerial(item)],
+                ['貸出先', item.borrower_id || item.borrower || ''],
+                ['貸出日', formatDate(item.lent_at || item.created_at || '')],
+                ['数量', getLendQuantity(item)],
+                ['返却日', formatDate(item.returned_at || item.processed_at || item.returned_on || '')],
+                ['貸出担当者', item.lent_by_id || '']
+            ])}
+        `;
+    } else {
+        dom.detailContent.innerHTML = `
+            <div class="history-detail-status is-complete">返却済み</div>
+            ${renderHistoryDetailGrid([
+                ['貸出番号', getLendKey(item)],
+                ['備品番号', getLendManagementNumber(item)],
+                ['備品名', getLendAssetName(item) || '備品名未取得'],
+                ['シリアル番号', getLendAssetSerial(item)],
+                ['貸出先', item.borrower_id || item.borrower || ''],
+                ['貸出日', formatDate(item.lent_at || item.lent_on || item.created_at || '')],
+                ['返却日', formatDate(item.returned_at || item.processed_at || item.returned_on || '')],
+                ['数量', item.quantity || getLendQuantity(item)],
+                ['返却担当者', item.processed_by_id || item.returned_by_id || '']
+            ])}
+            ${item.note ? `<div class="history-detail-note">${escapeHtml(item.note)}</div>` : ''}
+        `;
+    }
+
+    activeHistoryDetailContext = {
+        type,
+        returnFocusTo: document.activeElement instanceof Element ? document.activeElement : null
+    };
+    dom.detailModal.hidden = false;
+    document.body.classList.add('dialog-open');
+    dom.detailClose?.focus();
+}
+
+function closeHistoryDetailModal(type) {
+    const historyState = getHistoryState(type);
+    const dom = getHistoryDom(type);
+    if (!dom.detailModal) {
+        return;
+    }
+
+    dom.detailModal.hidden = true;
+    historyState.detailItem = null;
+    document.body.classList.remove('dialog-open');
+
+    if (
+        activeHistoryDetailContext
+        && activeHistoryDetailContext.type === type
+        && activeHistoryDetailContext.returnFocusTo instanceof Element
+    ) {
+        activeHistoryDetailContext.returnFocusTo.focus();
+    }
+    activeHistoryDetailContext = null;
+}
+
+function renderLendHistoryRow(item, index) {
     const returned = isLendReturned(item);
     return `
         <tr>
-            <td>${escapeHtml(displayHistoryValue(item.management_number))}</td>
-            <td>${escapeHtml(displayHistoryValue(item.asset_name, '備品名未取得'))}</td>
+            <td>${escapeHtml(displayHistoryValue(getLendManagementNumber(item)))}</td>
+            <td>${escapeHtml(displayHistoryValue(getLendAssetName(item), '備品名未取得'))}</td>
             <td>${escapeHtml(displayHistoryValue(item.borrower_id || item.borrower || ''))}</td>
             <td>${escapeHtml(displayHistoryValue(formatDate(item.lent_at || item.created_at || ''), '-'))}</td>
             <td>${escapeHtml(displayHistoryValue(getLendQuantity(item), '1'))}</td>
-            <td>${returned ? 'true' : 'false'}</td>
+            <td>${returned ? '返却済み' : '貸出中'}</td>
+            <td class="history-action-cell"><button class="sm-btn" onclick="LendReturnController.openLendHistoryDetail(${index})">詳細</button></td>
         </tr>
     `;
 }
@@ -551,23 +980,26 @@ function renderLendHistoryTable(items) {
                     <th>貸出日</th>
                     <th>数量</th>
                     <th>返却</th>
+                    <th>操作</th>
                 </tr>
             </thead>
             <tbody>
-                ${items.map(renderLendHistoryRow).join('')}
+                ${items.map((item, index) => renderLendHistoryRow(item, index)).join('')}
             </tbody>
         </table>
     `;
 }
 
-function renderReturnHistoryRow(item) {
+function renderReturnHistoryRow(item, index) {
     return `
         <tr>
-            <td>${escapeHtml(displayHistoryValue(item.management_number))}</td>
+            <td>${escapeHtml(displayHistoryValue(getLendManagementNumber(item)))}</td>
+            <td>${escapeHtml(displayHistoryValue(getLendAssetName(item), '備品名未取得'))}</td>
             <td>${escapeHtml(displayHistoryValue(item.borrower_id || item.borrower || ''))}</td>
             <td>${escapeHtml(displayHistoryValue(formatDate(item.lent_at || item.lent_on || item.created_at || ''), '-'))}</td>
             <td>${escapeHtml(displayHistoryValue(formatDate(item.returned_at || item.processed_at || ''), '-'))}</td>
             <td>${escapeHtml(displayHistoryValue(item.quantity || getLendQuantity(item), '1'))}</td>
+            <td class="history-action-cell"><button class="sm-btn" onclick="LendReturnController.openReturnHistoryDetail(${index})">詳細</button></td>
         </tr>
     `;
 }
@@ -578,14 +1010,16 @@ function renderReturnHistoryTable(items) {
             <thead>
                 <tr>
                     <th>備品番号</th>
+                    <th>備品名</th>
                     <th>貸出先</th>
                     <th>貸出日</th>
                     <th>返却日</th>
                     <th>数量</th>
+                    <th>操作</th>
                 </tr>
             </thead>
             <tbody>
-                ${items.map(renderReturnHistoryRow).join('')}
+                ${items.map((item, index) => renderReturnHistoryRow(item, index)).join('')}
             </tbody>
         </table>
     `;
@@ -644,6 +1078,8 @@ function renderLendHistory() {
 
     syncHistoryPerPageSelect('lend', lendState.history);
     syncHistoryFilterSelect('lend', lendState.history);
+    syncHistoryQueryInputs('lend', lendState.history);
+    syncHistoryFilterPanel('lend', lendState.history);
     updateHistorySummary('lend', lendState.history);
 
     if (!lendState.history.items || lendState.history.items.length === 0) {
@@ -651,12 +1087,24 @@ function renderLendHistory() {
         if (pagination) {
             pagination.innerHTML = '';
         }
-        setHistoryStatus('lend', `${getLendHistoryFilterLabel(lendState.history.filter)}の履歴はありません。`, 'info');
+        setHistoryStatus(
+            'lend',
+            hasActiveHistoryQuery(lendState.history.query)
+                ? '絞り込み条件に一致する貸出履歴はありません。'
+                : `${getLendHistoryFilterLabel(lendState.history.filter)}の履歴はありません。`,
+            'info'
+        );
         return;
     }
 
     list.innerHTML = renderLendHistoryTable(lendState.history.items);
-    setHistoryStatus('lend', `${getLendHistoryFilterLabel(lendState.history.filter)}の履歴を ${lendState.history.totalItems}件表示しています。`, 'success');
+    setHistoryStatus(
+        'lend',
+        hasActiveHistoryQuery(lendState.history.query)
+            ? `絞り込み条件に一致する貸出履歴を ${lendState.history.totalItems}件表示しています。`
+            : `${getLendHistoryFilterLabel(lendState.history.filter)}の履歴を ${lendState.history.totalItems}件表示しています。`,
+        'success'
+    );
     renderHistoryPagination(pagination, lendState.history.totalPages, lendState.history.currentPage, 'lend');
 }
 
@@ -667,6 +1115,8 @@ function renderReturnHistory() {
     }
 
     syncHistoryPerPageSelect('return', returnState.history);
+    syncHistoryQueryInputs('return', returnState.history);
+    syncHistoryFilterPanel('return', returnState.history);
     updateHistorySummary('return', returnState.history);
 
     if (!returnState.history.items || returnState.history.items.length === 0) {
@@ -674,12 +1124,24 @@ function renderReturnHistory() {
         if (pagination) {
             pagination.innerHTML = '';
         }
-        setHistoryStatus('return', '表示できる返却履歴はありません。', 'info');
+        setHistoryStatus(
+            'return',
+            hasActiveHistoryQuery(returnState.history.query)
+                ? '絞り込み条件に一致する返却履歴はありません。'
+                : '表示できる返却履歴はありません。',
+            'info'
+        );
         return;
     }
 
     list.innerHTML = renderReturnHistoryTable(returnState.history.items);
-    setHistoryStatus('return', `${returnState.history.totalItems}件の返却履歴を表示しています。`, 'success');
+    setHistoryStatus(
+        'return',
+        hasActiveHistoryQuery(returnState.history.query)
+            ? `絞り込み条件に一致する返却履歴を ${returnState.history.totalItems}件表示しています。`
+            : `${returnState.history.totalItems}件の返却履歴を表示しています。`,
+        'success'
+    );
     renderHistoryPagination(pagination, returnState.history.totalPages, returnState.history.currentPage, 'return');
 }
 
@@ -844,28 +1306,26 @@ window.LendReturnController = {
                 await API.lending.register(payload);
 
                 lendState.data = {};
-                if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-                    CommonController.showComplete({
-                        message: '貸出登録が完了しました',
-                        autoRedirectSeconds: 0,
-                        actions: [
-                            {
-                                label: '続けて貸出登録',
-                                routeKey: 'lend-input',
-                                style: 'primary-btn',
-                                clearHistory: true
-                            },
-                            {
-                                label: '貸出メニューへ戻る',
-                                routeKey: 'lend-menu',
-                                style: 'back-btn',
-                                clearHistory: true
-                            }
-                        ]
-                    });
-                } else {
-                    Router.to('lend-input');
-                }
+                clearHistorySourceCache('lend');
+                clearHistorySourceCache('return');
+                await showLendReturnComplete({
+                    message: '貸出登録が完了しました',
+                    autoRedirectSeconds: 0,
+                    actions: [
+                        {
+                            label: '続けて貸出登録',
+                            routeKey: 'lend-input',
+                            style: 'primary-btn',
+                            clearHistory: true
+                        },
+                        {
+                            label: '貸出メニューへ戻る',
+                            routeKey: 'lend-menu',
+                            style: 'back-btn',
+                            clearHistory: true
+                        }
+                    ]
+                });
             });
         } catch (error) {
             console.error('submitLend error:', error);
@@ -1033,29 +1493,27 @@ window.LendReturnController = {
                 returnState.targetLending = null;
                 returnState.searchResults = [];
                 returnState.inputData = {};
+                clearHistorySourceCache('lend');
+                clearHistorySourceCache('return');
 
-                if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-                    CommonController.showComplete({
-                        message: '返却処理が完了しました',
-                        autoRedirectSeconds: 0,
-                        actions: [
-                            {
-                                label: '続けて返却登録',
-                                routeKey: 'return-search',
-                                style: 'primary-btn',
-                                clearHistory: true
-                            },
-                            {
-                                label: '返却メニューへ戻る',
-                                routeKey: 'return-menu',
-                                style: 'back-btn',
-                                clearHistory: true
-                            }
-                        ]
-                    });
-                } else {
-                    Router.to('return-search');
-                }
+                await showLendReturnComplete({
+                    message: '返却処理が完了しました',
+                    autoRedirectSeconds: 0,
+                    actions: [
+                        {
+                            label: '続けて返却登録',
+                            routeKey: 'return-search',
+                            style: 'primary-btn',
+                            clearHistory: true
+                        },
+                        {
+                            label: '返却メニューへ戻る',
+                            routeKey: 'return-menu',
+                            style: 'back-btn',
+                            clearHistory: true
+                        }
+                    ]
+                });
             });
         } catch (error) {
             console.error('submitReturn error:', error);
@@ -1083,6 +1541,7 @@ window.LendReturnController = {
         }
 
         lendState.history.filter = value || 'all';
+        clearHistorySourceCache('lend');
         lendState.history.currentPage = 1;
         persistLendHistoryState();
         await this.loadLendHistory(1);
@@ -1129,6 +1588,98 @@ window.LendReturnController = {
         await this.loadReturnHistory(targetPage);
     },
 
+    openLendHistoryDetail(index) {
+        const item = lendState.history.items[index];
+        if (!item) {
+            setHistoryStatus('lend', '対象の貸出履歴が見つかりません。', 'error');
+            return;
+        }
+
+        lendState.history.detailItem = item;
+        openHistoryDetailModal('lend');
+    },
+
+    closeLendHistoryDetail() {
+        closeHistoryDetailModal('lend');
+    },
+
+    openReturnHistoryDetail(index) {
+        const item = returnState.history.items[index];
+        if (!item) {
+            setHistoryStatus('return', '対象の返却履歴が見つかりません。', 'error');
+            return;
+        }
+
+        returnState.history.detailItem = item;
+        openHistoryDetailModal('return');
+    },
+
+    closeReturnHistoryDetail() {
+        closeHistoryDetailModal('return');
+    },
+
+    async applyLendHistoryFilters() {
+        if (lendState.history.loading) {
+            return;
+        }
+
+        lendState.history.query = readHistoryQueryFromInputs('lend');
+        lendState.history.currentPage = 1;
+        persistLendHistoryState();
+        await this.loadLendHistory(1);
+    },
+
+    async clearLendHistoryFilters() {
+        if (lendState.history.loading) {
+            return;
+        }
+
+        lendState.history.query = createHistoryQuery();
+        lendState.history.currentPage = 1;
+        syncHistoryQueryInputs('lend', lendState.history);
+        persistLendHistoryState();
+        await this.loadLendHistory(1);
+    },
+
+    toggleLendHistoryFilters() {
+        if (lendState.history.loading) {
+            return;
+        }
+
+        toggleHistoryFilterPanel('lend');
+    },
+
+    async applyReturnHistoryFilters() {
+        if (returnState.history.loading) {
+            return;
+        }
+
+        returnState.history.query = readHistoryQueryFromInputs('return');
+        returnState.history.currentPage = 1;
+        persistReturnHistoryState();
+        await this.loadReturnHistory(1);
+    },
+
+    async clearReturnHistoryFilters() {
+        if (returnState.history.loading) {
+            return;
+        }
+
+        returnState.history.query = createHistoryQuery();
+        returnState.history.currentPage = 1;
+        syncHistoryQueryInputs('return', returnState.history);
+        persistReturnHistoryState();
+        await this.loadReturnHistory(1);
+    },
+
+    toggleReturnHistoryFilters() {
+        if (returnState.history.loading) {
+            return;
+        }
+
+        toggleHistoryFilterPanel('return');
+    },
+
     async loadLendHistory(page = 1) {
         const { list, pagination } = getHistoryDom('lend');
         if (!list) {
@@ -1147,20 +1698,33 @@ window.LendReturnController = {
         }
 
         try {
-            const params = {
-                limit: lendState.history.itemsPerPage,
-                offset: (page - 1) * lendState.history.itemsPerPage
-            };
-            if (lendState.history.filter === 'active') {
-                params.returned = false;
-            } else if (lendState.history.filter === 'returned') {
-                params.returned = true;
+            if (hasActiveHistoryQuery(lendState.history.query)) {
+                const sourceItems = await getLendHistorySourceItems();
+                const filteredItems = filterLendHistoryItems(sourceItems);
+                const normalized = normalizePageResponse(filteredItems, {
+                    page,
+                    itemsPerPage: lendState.history.itemsPerPage
+                });
+                lendState.history.items = normalized.items;
+                lendState.history.totalItems = normalized.totalItems;
+                lendState.history.totalPages = normalized.totalPages;
+                lendState.history.currentPage = Math.min(page, normalized.totalPages);
+            } else {
+                const params = {
+                    limit: lendState.history.itemsPerPage,
+                    offset: (page - 1) * lendState.history.itemsPerPage
+                };
+                if (lendState.history.filter === 'active') {
+                    params.returned = false;
+                } else if (lendState.history.filter === 'returned') {
+                    params.returned = true;
+                }
+
+                const response = await API.lending.fetchLends(params);
+                assignHistoryPage(lendState.history, response, page);
+                lendState.history.items = await enrichLendItemsWithAssetDetails(lendState.history.items);
             }
 
-            const response = await API.lending.fetchLends(params);
-
-            assignHistoryPage(lendState.history, response, page);
-            lendState.history.items = await enrichLendItemsWithAssetDetails(lendState.history.items);
             persistLendHistoryState();
             renderLendHistory();
         } catch (error) {
@@ -1199,13 +1763,27 @@ window.LendReturnController = {
         }
 
         try {
-            const response = await API.lending.fetchReturns({
-                limit: returnState.history.itemsPerPage,
-                offset: (page - 1) * returnState.history.itemsPerPage
-            });
+            if (hasActiveHistoryQuery(returnState.history.query)) {
+                const sourceItems = await getReturnHistorySourceItems();
+                const filteredItems = filterReturnHistoryItems(sourceItems);
+                const normalized = normalizePageResponse(filteredItems, {
+                    page,
+                    itemsPerPage: returnState.history.itemsPerPage
+                });
+                returnState.history.items = normalized.items;
+                returnState.history.totalItems = normalized.totalItems;
+                returnState.history.totalPages = normalized.totalPages;
+                returnState.history.currentPage = Math.min(page, normalized.totalPages);
+            } else {
+                const response = await API.lending.fetchReturns({
+                    limit: returnState.history.itemsPerPage,
+                    offset: (page - 1) * returnState.history.itemsPerPage
+                });
 
-            assignHistoryPage(returnState.history, response, page);
-            returnState.history.items = await enrichReturnHistoryItems(returnState.history.items);
+                assignHistoryPage(returnState.history, response, page);
+                returnState.history.items = await enrichReturnHistoryItems(returnState.history.items);
+            }
+
             persistReturnHistoryState();
             renderReturnHistory();
         } catch (error) {
@@ -1328,9 +1906,17 @@ export function initLendReturn(view) {
 
     if (view === 'lend-history') {
         restoreLendHistoryState();
+        historyFilterUiState.lend = false;
+        syncHistoryQueryInputs('lend', lendState.history);
+        syncHistoryFilterPanel('lend', lendState.history);
+        closeHistoryDetailModal('lend');
         window.LendReturnController.loadLendHistory(lendState.history.currentPage);
     } else if (view === 'return-history') {
         restoreReturnHistoryState();
+        historyFilterUiState.return = false;
+        syncHistoryQueryInputs('return', returnState.history);
+        syncHistoryFilterPanel('return', returnState.history);
+        closeHistoryDetailModal('return');
         window.LendReturnController.loadReturnHistory(returnState.history.currentPage);
     }
 }

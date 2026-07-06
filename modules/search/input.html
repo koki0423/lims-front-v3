@@ -2,7 +2,6 @@
     <h2>OR 検索: 備品番号 または 備品名のどちらかを入力してください</h2>
     <div class="screen-tools-stack">
         <div id="search-feedback" class="batch-status-banner info page-feedback" hidden></div>
-        <div id="search-asset-preview"></div>
     </div>
     <div class="form-group">
         <label>備品番号</label>
@@ -17,7 +16,7 @@
     </div>
 
     <div class="nav-buttons nav-buttons-spacious">
-        <button id="search-back-btn" class="back-btn" onclick="Router.back('main-menu')">戻る</button>
+        <button id="search-back-btn" class="back-btn" onclick="Router.to('main-menu')">戻る</button>
         <button id="search-submit-btn" class="primary-btn" onclick="SearchController.performSearch()">検索</button>
     </div>
 </div>

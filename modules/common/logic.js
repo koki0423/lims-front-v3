@@ -45,7 +45,7 @@ window.CommonController = {
             applyCompleteState(options || {});
         }
 
-        Router.to('complete');
+        return Router.to('complete');
     },
 
     runAction(index = 0) {

@@ -9,3 +9,28 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
+
+.item-list-toolbar {
+    margin-top: 0;
+}
+
+.item-list-table-shell {
+    margin-top: 0;
+}
+
+.item-list-record-table .item-list-qty-cell,
+.item-list-record-table .item-list-status-cell {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.item-list-record-table .history-action-cell {
+    width: 176px;
+}
+
+.item-list-action-group {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}

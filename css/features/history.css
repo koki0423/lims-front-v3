@@ -18,6 +18,42 @@
     margin-bottom: 16px;
 }
 
+.history-filter-panel {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: #fbfcfb;
+    border: 1px solid #e2e8e4;
+    border-radius: 12px;
+}
+
+.history-filter-toggle-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+}
+
+.history-filter-toggle-row button[aria-expanded="true"] {
+    background: #eef5ef;
+    border-color: #cddacd;
+}
+
+.history-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px 14px;
+}
+
+.history-filter-grid .form-group {
+    margin-bottom: 0;
+}
+
+.history-filter-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
 .history-rows-per-page {
     padding: 10px 12px;
     background: #fbfcfb;
@@ -88,6 +124,12 @@
     color: #1f2c24;
     font-size: 0.95rem;
     word-break: break-word;
+}
+
+.history-record-table .history-action-cell {
+    width: 92px;
+    text-align: center;
+    white-space: nowrap;
 }
 
 .history-record-table tbody tr:nth-child(even) {
@@ -254,6 +296,51 @@
     animation: historyShimmer 1.4s ease infinite;
 }
 
+.history-detail-modal-window {
+    width: min(92%, 760px);
+    max-width: 760px;
+    max-height: min(86vh, 820px);
+    overflow-y: auto;
+}
+
+.history-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.history-detail-status {
+    display: inline-flex;
+    margin-bottom: 14px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.history-detail-status.is-active {
+    color: #255c31;
+    background: #edf8ee;
+    border: 1px solid #cde9d0;
+}
+
+.history-detail-status.is-complete {
+    color: #28528f;
+    background: #eef5ff;
+    border: 1px solid #cfe0ff;
+}
+
+.history-detail-note {
+    margin-top: 14px;
+    padding: 12px 14px;
+    color: #52615a;
+    line-height: 1.7;
+    white-space: pre-line;
+    background: #f8faf8;
+    border: 1px solid #edf1ee;
+    border-radius: 10px;
+}
+
 @keyframes historyShimmer {
     0% {
         background-position: 100% 0;
@@ -267,6 +354,22 @@
 @media (max-width: 640px) {
     .history-toolbar {
         align-items: stretch;
+    }
+
+    .history-filter-actions {
+        flex-direction: column-reverse;
+    }
+
+    .history-filter-actions button {
+        width: 100%;
+    }
+
+    .history-filter-toggle-row {
+        justify-content: stretch;
+    }
+
+    .history-filter-toggle-row button {
+        width: 100%;
     }
 
     .history-rows-per-page {

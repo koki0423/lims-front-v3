@@ -5,6 +5,21 @@
         <div id="item-list-device-status"></div>
     </div>
 
+    <div class="history-summary-grid item-list-summary-grid">
+        <div class="batch-summary-card">
+            <span>総件数</span>
+            <strong id="item-list-total">-</strong>
+        </div>
+        <div class="batch-summary-card">
+            <span>現在ページ</span>
+            <strong id="item-list-page">-</strong>
+        </div>
+        <div class="batch-summary-card">
+            <span>表示範囲</span>
+            <strong id="item-list-range">-</strong>
+        </div>
+    </div>
+
     <div id="item-list-filter-controls" class="filters-container">
         <label>絞り込み:</label>
         <button class="filter-btn" data-status="1" onclick="ItemListController.toggleFilter('1')">正常</button>
@@ -14,8 +29,9 @@
         <button class="filter-btn" data-status="5" onclick="ItemListController.toggleFilter('5')">廃棄済み</button>
         <button class="filter-btn" data-status="6" onclick="ItemListController.toggleFilter('6')">紛失</button>
     </div>
-    <div class="pagination-container">
-        <div class="rows-per-page">
+
+    <div class="history-toolbar item-list-toolbar">
+        <div class="rows-per-page history-rows-per-page">
             <label>表示件数:</label>
             <select id="item-list-per-page" onchange="ItemListController.changePerPage(this.value)">
                 <option value="10">10件</option>
@@ -25,23 +41,24 @@
             </select>
         </div>
 
-        <div id="pagination-controls" class="pagination-controls">
-        </div>
+        <div id="pagination-controls" class="pagination-controls history-pagination"></div>
     </div>
 
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>備品番号</th>
-                <th>備品名</th>
-                <th>数量</th>
-                <th>状態</th>
-                <th>操作</th>
-            </tr>
-        </thead>
-        <tbody id="item-list-body">
-        </tbody>
-    </table>
+    <div class="history-list-shell history-table-shell item-list-table-shell">
+        <table class="history-record-table item-list-record-table">
+            <thead>
+                <tr>
+                    <th>備品番号</th>
+                    <th>備品名</th>
+                    <th>数量</th>
+                    <th>状態</th>
+                    <th class="history-action-cell">操作</th>
+                </tr>
+            </thead>
+            <tbody id="item-list-body">
+            </tbody>
+        </table>
+    </div>
 
     <div class="nav-buttons">
         <button class="back-btn" onclick="Router.back('main-menu')">戻る</button>

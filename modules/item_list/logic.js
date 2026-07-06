@@ -72,6 +72,31 @@ function syncItemListPerPageSelect() {
     }
 }
 
+function updateItemListSummary(state = itemListState) {
+    const total = document.getElementById('item-list-total');
+    const page = document.getElementById('item-list-page');
+    const range = document.getElementById('item-list-range');
+    const safeTotalItems = Number(state.totalItems) || 0;
+    const safeTotalPages = Math.max(1, Number(state.totalPages) || 1);
+    const safeCurrentPage = Math.min(Math.max(1, Number(state.currentPage) || 1), safeTotalPages);
+
+    if (total) {
+        total.textContent = `${safeTotalItems}件`;
+    }
+    if (page) {
+        page.textContent = `${safeCurrentPage} / ${safeTotalPages}`;
+    }
+    if (range) {
+        if (safeTotalItems === 0) {
+            range.textContent = '0件';
+        } else {
+            const start = (safeCurrentPage - 1) * state.itemsPerPage + 1;
+            const end = Math.min(safeCurrentPage * state.itemsPerPage, safeTotalItems);
+            range.textContent = `${start}-${end}件`;
+        }
+    }
+}
+
 function setItemListLoading(isLoading) {
     itemListState.loading = isLoading;
     setControlsDisabled([
@@ -220,7 +245,9 @@ async function loadItemPage(page = 1) {
         itemListState.items = [];
         itemListState.totalItems = 0;
         itemListState.totalPages = 1;
+        itemListState.currentPage = 1;
         showPageFeedback('item-list-feedback', '備品一覧の取得に失敗しました。', 'error');
+        updateItemListSummary();
 
         if (tbody) {
             tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state table-empty-state-error">データの取得に失敗しました</td></tr>';
@@ -710,6 +737,7 @@ function renderList() {
     const tbody = document.getElementById('item-list-body');
     const paginationDiv = document.getElementById('pagination-controls');
     if (!tbody) return;
+    updateItemListSummary();
 
     if (itemListState.items.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">該当する備品はありません</td></tr>';
@@ -724,18 +752,23 @@ function renderList() {
         const statusObj = STATUS_MAP[statusId] || { name: '不明', class: 'badge-gray' };
         const displayId = item.management_number || item.asset_id || '-';
         const displayName = item.name || `(マスタID: ${item.asset_master_id})`;
+        const displayQty = item.quantity === undefined || item.quantity === null || item.quantity === ''
+            ? '-'
+            : String(item.quantity);
 
         return `
             <tr>
-                <td class="table-cell-compact">${escapeHtml(displayId)}</td>
-                <td class="table-cell-compact">${escapeHtml(displayName)}</td>
-                <td class="table-cell-compact">${escapeHtml(item.quantity)}</td>
-                <td class="table-cell-compact table-cell-center">
+                <td>${escapeHtml(displayId)}</td>
+                <td>${escapeHtml(displayName)}</td>
+                <td class="item-list-qty-cell">${escapeHtml(displayQty)}</td>
+                <td class="item-list-status-cell">
                     <span class="status-badge ${statusObj.class}">${statusObj.name}</span>
                 </td>
-                <td class="table-cell-compact table-cell-center">
-                    <button class="sm-btn" onclick="ItemListController.editByIndex(${index})">詳細</button>
-                    <button class="sm-btn" onclick="ItemListController.openLabelModalByIndex(${index})">ラベル印刷</button>
+                <td class="history-action-cell">
+                    <div class="item-list-action-group">
+                        <button class="sm-btn" onclick="ItemListController.editByIndex(${index})">詳細</button>
+                        <button class="sm-btn" onclick="ItemListController.openLabelModalByIndex(${index})">ラベル印刷</button>
+                    </div>
                 </td>
             </tr>
         `;

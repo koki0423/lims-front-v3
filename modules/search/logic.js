@@ -2,10 +2,9 @@ import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
 import { escapeHtml } from '../../js/dom_utils.js';
-import { mountAssetPreview } from '../../js/asset_preview.js';
 import { runWithButtonLoading, setControlsDisabled } from '../../js/ui_loading.js';
 import { hidePageFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
-import { loadViewState, saveViewState } from '../../js/view_state.js';
+import { clearViewState, loadViewState, saveViewState } from '../../js/view_state.js';
 
 // === 定数定義 ===
 // ステータス定義 (ID -> 表示名)
@@ -34,6 +33,28 @@ const searchState = {
     },
     searching: false
 };
+
+function resetSearchState({ clearPersisted = false } = {}) {
+    searchState.result = null;
+    searchState.candidates = [];
+    searchState.displayList = [];
+    searchState.currentFilter = null;
+    searchState.sortKey = null;
+    searchState.sortOrder = 'asc';
+    searchState.query = {
+        itemId: '',
+        name: ''
+    };
+    searchState.searching = false;
+
+    if (clearPersisted) {
+        clearViewState(SEARCH_VIEW_STATE_KEY);
+    }
+}
+
+function hasSearchQuery() {
+    return Boolean(searchState.query.itemId || searchState.query.name);
+}
 
 function persistSearchState() {
     saveViewState(SEARCH_VIEW_STATE_KEY, {
@@ -104,6 +125,135 @@ function setSearchBusy(isBusy) {
     ], isBusy);
 }
 
+function setSearchListBusy(isBusy) {
+    setControlsDisabled([
+        '#search-list-filter-controls .filter-btn',
+        '#search-list-clear-btn',
+        '#search-list-back-btn',
+        '#search-candidates-body .sm-btn',
+        '#search-list-condition-chips button'
+    ], isBusy);
+}
+
+function createConditionChip(label, value, onRemove, isBusy = false) {
+    const removeButton = onRemove
+        ? `<button type="button" onclick="${onRemove}" ${isBusy ? 'disabled' : ''} aria-label="${escapeHtml(label)}を解除">×</button>`
+        : '';
+    return `<span class="list-condition-chip"><span>${escapeHtml(label)}: ${escapeHtml(value)}</span>${removeButton}</span>`;
+}
+
+function getSearchSortLabel() {
+    if (!searchState.sortKey) {
+        return '';
+    }
+
+    const labels = {
+        mgmt: '備品番号',
+        name: '備品名',
+        status: '状態',
+        location: '場所/利用者'
+    };
+    const baseLabel = labels[searchState.sortKey] || searchState.sortKey;
+    return `${baseLabel} ${searchState.sortOrder === 'desc' ? '降順' : '昇順'}`;
+}
+
+function renderSearchListConditions() {
+    const summary = document.getElementById('search-list-summary');
+    const chips = document.getElementById('search-list-condition-chips');
+    const clearButton = document.getElementById('search-list-clear-btn');
+
+    if (!summary && !chips && !clearButton) {
+        return;
+    }
+
+    const totalCandidates = Array.isArray(searchState.candidates) ? searchState.candidates.length : 0;
+    const visibleCount = Array.isArray(searchState.displayList) ? searchState.displayList.length : 0;
+    if (summary) {
+        summary.textContent = totalCandidates === 0
+            ? '候補はありません。'
+            : `候補 ${totalCandidates}件中 ${visibleCount}件を表示しています。`;
+    }
+
+    const chipHtml = [];
+    if (searchState.query.itemId) {
+        chipHtml.push(createConditionChip('備品番号', searchState.query.itemId, "SearchController.removeQueryCondition('itemId')", searchState.searching));
+    }
+    if (searchState.query.name) {
+        chipHtml.push(createConditionChip('備品名', searchState.query.name, "SearchController.removeQueryCondition('name')", searchState.searching));
+    }
+    if (searchState.currentFilter) {
+        chipHtml.push(createConditionChip('状態', getStatusName(searchState.currentFilter), 'SearchController.clearStatusFilter()', searchState.searching));
+    }
+    if (searchState.sortKey) {
+        chipHtml.push(createConditionChip('並び順', getSearchSortLabel(), 'SearchController.clearSortCondition()', searchState.searching));
+    }
+
+    if (chips) {
+        chips.innerHTML = chipHtml.join('');
+    }
+    if (clearButton) {
+        clearButton.disabled = chipHtml.length === 0 || searchState.searching;
+    }
+}
+
+async function routeToSearchInputWithFeedback(message, tone = 'warning') {
+    await Router.to('search-top');
+    showPageFeedback('search-feedback', message, tone);
+}
+
+async function executeSearchFromState({ resetListState = false, emptyBehavior = 'stay' } = {}) {
+    searchState.result = null;
+    searchState.candidates = [];
+    searchState.displayList = [];
+
+    if (resetListState) {
+        searchState.currentFilter = null;
+        searchState.sortKey = null;
+        searchState.sortOrder = 'asc';
+    }
+
+    persistSearchState();
+
+    if (!hasSearchQuery()) {
+        if (emptyBehavior === 'route-to-input') {
+            await Router.to('search-top');
+        }
+        return;
+    }
+
+    let results = [];
+    if (searchState.query.itemId) {
+        const res = await API.assets.getPair(searchState.query.itemId);
+        results = Array.isArray(res) ? res : [res];
+    } else if (searchState.query.name) {
+        results = await API.assets.searchByName(searchState.query.name);
+    }
+
+    if (!results || results.length === 0) {
+        persistSearchState();
+        if (emptyBehavior === 'route-to-input') {
+            await routeToSearchInputWithFeedback('該当する備品は見つかりませんでした。', 'warning');
+        } else {
+            showPageFeedback('search-feedback', '該当する備品は見つかりませんでした。', 'warning');
+        }
+        return;
+    }
+
+    await AppState.loadGenres({ all: true });
+
+    if (results.length === 1) {
+        searchState.result = formatPairData(results[0]);
+        searchState.candidates = [];
+        persistSearchState();
+        Router.to('search-result');
+        return;
+    }
+
+    searchState.candidates = results;
+    persistSearchState();
+    Router.to('search-list');
+}
+
 // === ヘルパー関数 ===
 function genreById(id) {
     return AppState.getGenreById(id, { all: true });
@@ -157,51 +307,12 @@ window.SearchController = {
 
         try {
             await runWithButtonLoading('#search-submit-btn', { busyText: '検索中...' }, async () => {
-                searchState.result = null;
-                searchState.candidates = [];
-                searchState.displayList = [];
-                searchState.currentFilter = null;
-                searchState.sortKey = null;
-                searchState.sortOrder = 'asc';
-
                 syncSearchQueryFromInputs();
-                persistSearchState();
-
-                const idQuery = searchState.query.itemId;
-                const nameQuery = searchState.query.name;
-
-                if (!idQuery && !nameQuery) {
+                if (!hasSearchQuery()) {
                     showPageFeedback('search-feedback', '検索条件を入力してください。', 'error');
                     return;
                 }
-
-                let results = [];
-
-                if (idQuery) {
-                    const res = await API.assets.getPair(idQuery);
-                    results = Array.isArray(res) ? res : [res];
-                } else if (nameQuery) {
-                    results = await API.assets.searchByName(nameQuery);
-                }
-
-                if (!results || results.length === 0) {
-                    persistSearchState();
-                    showPageFeedback('search-feedback', '該当する備品は見つかりませんでした。', 'warning');
-                    return;
-                }
-
-                await AppState.loadGenres({ all: true });
-
-                if (results.length === 1) {
-                    searchState.result = formatPairData(results[0]);
-                    searchState.candidates = [];
-                    persistSearchState();
-                    Router.to('search-result');
-                } else {
-                    searchState.candidates = results;
-                    persistSearchState();
-                    Router.to('search-list');
-                }
+                await executeSearchFromState({ resetListState: true, emptyBehavior: 'stay' });
             });
         } catch (e) {
             console.error(e);
@@ -248,6 +359,56 @@ window.SearchController = {
         initSearchList(); // 再描画
     },
 
+    clearStatusFilter() {
+        searchState.currentFilter = null;
+        persistSearchState();
+        initSearchList();
+        this.updateFilterStyles();
+    },
+
+    clearSortCondition() {
+        searchState.sortKey = null;
+        searchState.sortOrder = 'asc';
+        persistSearchState();
+        initSearchList();
+    },
+
+    async removeQueryCondition(key) {
+        if (searchState.searching || !Object.prototype.hasOwnProperty.call(searchState.query, key)) {
+            return;
+        }
+
+        searchState.query[key] = '';
+        searchState.searching = true;
+        setSearchListBusy(true);
+        try {
+            await executeSearchFromState({ resetListState: false, emptyBehavior: 'route-to-input' });
+        } catch (error) {
+            console.error(error);
+            showApiPageFeedback('search-list-feedback', error, '検索条件の更新に失敗しました。');
+        } finally {
+            searchState.searching = false;
+            setSearchListBusy(false);
+            renderSearchListConditions();
+        }
+    },
+
+    clearListConditions() {
+        if (searchState.searching) {
+            return;
+        }
+
+        searchState.query = { itemId: '', name: '' };
+        searchState.currentFilter = null;
+        searchState.sortKey = null;
+        searchState.sortOrder = 'asc';
+        searchState.result = null;
+        searchState.candidates = [];
+        searchState.displayList = [];
+        persistSearchState();
+        Router.to('search-top');
+    },
+
     // 一覧画面で「詳細」ボタンを押したときの処理
     selectCandidate(index) {
         const rawData = searchState.displayList[index];
@@ -265,32 +426,17 @@ window.SearchController = {
 
     // 戻るボタンの挙動
     backToSearch() {
-        // 詳細表示中のデータをクリア
         searchState.result = null;
-
-        // 候補リスト(candidates)を持っているかチェック
-        if (searchState.candidates && searchState.candidates.length > 0) {
-            // 一覧経由できた場合 -> 一覧画面に戻る
-            persistSearchState();
-            Router.to('search-list');
-        } else {
-            // 直接1件ヒットした場合 -> 検索トップに戻る
-            persistSearchState();
-            Router.to('search-top');
-        }
+        Router.to('search-top');
     }
 };
 
 // === 画面初期化 (result.html 表示時) ===
 export function initSearch(view) {
     if (view === 'input') {
-        restoreSearchState();
+        resetSearchState({ clearPersisted: true });
         hidePageFeedback('search-feedback');
         applySearchQueryToInputs();
-        bindSearchInputPersistence();
-        mountAssetPreview('input[name="itemId"]', 'search-asset-preview', {
-            emptyMessage: '備品番号を入力すると、検索前に備品情報を確認できます。'
-        });
         return;
     }
 
@@ -382,6 +528,7 @@ export function initSearchList() {
         restoreSearchState();
     }
     hidePageFeedback('search-list-feedback');
+    renderSearchListConditions();
 
     // ボタンのスタイル初期化
     if (window.SearchController.updateFilterStyles) {
@@ -391,6 +538,7 @@ export function initSearchList() {
     if (!searchState.candidates || searchState.candidates.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
         showPageFeedback('search-list-feedback', '検索結果がありません。再検索してください。', 'warning');
+        renderSearchListConditions();
         return;
     }
 
@@ -436,6 +584,7 @@ export function initSearchList() {
     if (list.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">該当する条件の備品はありません</td></tr>';
         showPageFeedback('search-list-feedback', '条件に一致する備品はありません。絞り込み条件を確認してください。', 'warning');
+        renderSearchListConditions();
         return;
     }
 
@@ -467,6 +616,7 @@ export function initSearchList() {
 
     updateSortArrows();
     persistSearchState();
+    renderSearchListConditions();
 }
 
 function updateSortArrows() {

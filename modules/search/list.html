@@ -2,7 +2,14 @@
     <h2>検索結果: 候補一覧</h2>
     <p>条件に一致する備品が複数見つかりました。</p>
     <div id="search-list-feedback" class="batch-status-banner info page-feedback" hidden></div>
-    <div class="filters-container">
+    <div class="list-state-panel">
+        <div id="search-list-summary" class="list-state-summary">-</div>
+        <div id="search-list-condition-chips" class="list-condition-chips"></div>
+        <div class="list-condition-actions">
+            <button type="button" id="search-list-clear-btn" class="back-btn" onclick="SearchController.clearListConditions()">条件クリア</button>
+        </div>
+    </div>
+    <div id="search-list-filter-controls" class="filters-container">
         <label>絞り込み:</label>
         <button class="filter-btn" data-status="1" onclick="SearchController.toggleFilter('1')">正常</button>
         <button class="filter-btn" data-status="2" onclick="SearchController.toggleFilter('2')">故障</button>
@@ -36,6 +43,6 @@
     </div>
 
     <div class="nav-buttons nav-buttons-compact">
-        <button class="back-btn" onclick="Router.to('search-top')">再検索</button>
+        <button id="search-list-back-btn" class="back-btn" onclick="Router.to('search-top')">再検索</button>
     </div>
 </div>
