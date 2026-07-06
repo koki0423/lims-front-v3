@@ -4,7 +4,9 @@ import { escapeHtml, toDateInputValue } from '../../js/dom_utils.js';
 import { normalizePageResponse } from '../../js/pagination_utils.js';
 import { mountAssetPreview } from '../../js/asset_preview.js';
 import { mountDeviceStatusPanel } from '../../js/device_status.js';
+import { runWithButtonLoading, setControlsDisabled } from '../../js/ui_loading.js';
 import { clearFeedbackInContainer, clearFieldFeedback, hidePageFeedback, setFieldFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
+import { loadViewState, saveViewState } from '../../js/view_state.js';
 
 const lendState = {
     data: {},
@@ -14,7 +16,8 @@ const lendState = {
         itemsPerPage: 20,
         filter: 'all',
         totalPages: 1,
-        totalItems: 0
+        totalItems: 0,
+        loading: false
     }
 };
 
@@ -27,16 +30,20 @@ const returnState = {
         currentPage: 1,
         itemsPerPage: 20,
         totalPages: 1,
-        totalItems: 0
+        totalItems: 0,
+        loading: false
     }
 };
 
 let isSubmittingLend = false;
 let isSubmittingReturn = false;
+let isSearchingLending = false;
 const lendAssetDetailsCache = new Map();
 const lendAssetDetailsRequestCache = new Map();
 const lendRecordCache = new Map();
 const lendRecordRequestCache = new Map();
+const LEND_HISTORY_VIEW_STATE_KEY = 'lend-history-view';
+const RETURN_HISTORY_VIEW_STATE_KEY = 'return-history-view';
 const LEND_RETURN_FEEDBACK_IDS = [
     'lend-input-feedback',
     'return-input-feedback',
@@ -47,6 +54,38 @@ const LEND_RETURN_FEEDBACK_IDS = [
 
 async function loadNfcReader() {
     return import('../../js/nfcReader.js');
+}
+
+function restoreLendHistoryState() {
+    const persisted = loadViewState(LEND_HISTORY_VIEW_STATE_KEY, {});
+    lendState.history.currentPage = Math.max(1, Number(persisted.currentPage) || 1);
+    lendState.history.itemsPerPage = [10, 20, 50, 100].includes(Number(persisted.itemsPerPage))
+        ? Number(persisted.itemsPerPage)
+        : 20;
+    lendState.history.filter = persisted.filter || 'all';
+}
+
+function persistLendHistoryState() {
+    saveViewState(LEND_HISTORY_VIEW_STATE_KEY, {
+        currentPage: lendState.history.currentPage,
+        itemsPerPage: lendState.history.itemsPerPage,
+        filter: lendState.history.filter
+    });
+}
+
+function restoreReturnHistoryState() {
+    const persisted = loadViewState(RETURN_HISTORY_VIEW_STATE_KEY, {});
+    returnState.history.currentPage = Math.max(1, Number(persisted.currentPage) || 1);
+    returnState.history.itemsPerPage = [10, 20, 50, 100].includes(Number(persisted.itemsPerPage))
+        ? Number(persisted.itemsPerPage)
+        : 20;
+}
+
+function persistReturnHistoryState() {
+    saveViewState(RETURN_HISTORY_VIEW_STATE_KEY, {
+        currentPage: returnState.history.currentPage,
+        itemsPerPage: returnState.history.itemsPerPage
+    });
 }
 
 function toArray(data) {
@@ -404,6 +443,26 @@ function syncHistoryFilterSelect(type, historyState) {
     if (filter) {
         filter.value = historyState.filter || 'all';
     }
+}
+
+function setHistoryControlsLoading(type, isLoading) {
+    const { config } = getHistoryDom(type);
+    const selectors = [
+        `#${config.perPageId}`,
+        `#${config.paginationId} .page-btn`
+    ];
+
+    if (config.filterId) {
+        selectors.push(`#${config.filterId}`);
+    }
+
+    if (type === 'lend') {
+        lendState.history.loading = isLoading;
+    } else {
+        returnState.history.loading = isLoading;
+    }
+
+    setControlsDisabled(selectors, isLoading);
 }
 
 function updateHistorySummary(type, historyState) {
@@ -767,49 +826,53 @@ window.LendReturnController = {
         }
 
         isSubmittingLend = true;
+        setControlsDisabled(['#lend-confirm-back-btn'], true);
 
         try {
             hidePageFeedback('lend-confirm-feedback');
-            const payload = {
-                management_number: lendState.data.itemId,
-                quantity: Number(lendState.data.qty),
-                borrower_id: lendState.data.borrower,
-                due_on: lendState.data.dueDate ? lendState.data.dueDate : null,
-                lent_by_id: lendState.data.lender ? lendState.data.lender : null
-            };
+            await runWithButtonLoading('#lend-submit-btn', { busyText: '登録中...' }, async () => {
+                const payload = {
+                    management_number: lendState.data.itemId,
+                    quantity: Number(lendState.data.qty),
+                    borrower_id: lendState.data.borrower,
+                    due_on: lendState.data.dueDate ? lendState.data.dueDate : null,
+                    lent_by_id: lendState.data.lender ? lendState.data.lender : null
+                };
 
-            console.log('submit lend payload:', payload);
+                console.log('submit lend payload:', payload);
 
-            await API.lending.register(payload);
+                await API.lending.register(payload);
 
-            lendState.data = {};
-            if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-                CommonController.showComplete({
-                    message: '貸出登録が完了しました',
-                    autoRedirectSeconds: 0,
-                    actions: [
-                        {
-                            label: '続けて貸出登録',
-                            routeKey: 'lend-input',
-                            style: 'primary-btn',
-                            clearHistory: true
-                        },
-                        {
-                            label: '貸出メニューへ戻る',
-                            routeKey: 'lend-menu',
-                            style: 'back-btn',
-                            clearHistory: true
-                        }
-                    ]
-                });
-            } else {
-                Router.to('lend-input');
-            }
+                lendState.data = {};
+                if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
+                    CommonController.showComplete({
+                        message: '貸出登録が完了しました',
+                        autoRedirectSeconds: 0,
+                        actions: [
+                            {
+                                label: '続けて貸出登録',
+                                routeKey: 'lend-input',
+                                style: 'primary-btn',
+                                clearHistory: true
+                            },
+                            {
+                                label: '貸出メニューへ戻る',
+                                routeKey: 'lend-menu',
+                                style: 'back-btn',
+                                clearHistory: true
+                            }
+                        ]
+                    });
+                } else {
+                    Router.to('lend-input');
+                }
+            });
         } catch (error) {
             console.error('submitLend error:', error);
             showApiPageFeedback('lend-confirm-feedback', error, '貸出登録に失敗しました。');
         } finally {
             isSubmittingLend = false;
+            setControlsDisabled(['#lend-confirm-back-btn'], false);
         }
     },
 
@@ -832,6 +895,10 @@ window.LendReturnController = {
     },
 
     async searchLending() {
+        if (isSearchingLending) {
+            return;
+        }
+
         const input = document.getElementById('return-search-query');
         const query = input ? input.value.trim() : '';
         hidePageFeedback('return-search-feedback');
@@ -847,40 +914,47 @@ window.LendReturnController = {
             return;
         }
 
+        isSearchingLending = true;
+        setControlsDisabled(['#return-search-query', '#return-search-back-btn'], true);
         try {
-            let list = toArray(await API.lending.fetchLends({
-                management_number: query,
-                returned: false,
-                limit: 20
-            }));
-
-            if (list.length === 0) {
-                list = toArray(await API.lending.fetchLends({
-                    borrower_id: query,
+            await runWithButtonLoading('#return-search-btn', { busyText: '参照中...' }, async () => {
+                let list = toArray(await API.lending.fetchLends({
+                    management_number: query,
                     returned: false,
                     limit: 20
                 }));
-            }
 
-            if (list.length === 0) {
-                showPageFeedback('return-search-feedback', '該当する貸出情報が見つかりません。', 'warning');
-                return;
-            }
+                if (list.length === 0) {
+                    list = toArray(await API.lending.fetchLends({
+                        borrower_id: query,
+                        returned: false,
+                        limit: 20
+                    }));
+                }
 
-            if (list.length === 1) {
-                const [target] = await enrichLendItemsWithAssetDetails(list);
-                returnState.targetLending = target;
-                returnState.searchResults = [];
-                Router.to('return-input');
-                return;
-            }
+                if (list.length === 0) {
+                    showPageFeedback('return-search-feedback', '該当する貸出情報が見つかりません。', 'warning');
+                    return;
+                }
 
-            returnState.targetLending = null;
-            returnState.searchResults = await enrichLendItemsWithAssetDetails(list);
-            Router.to('return-select');
+                if (list.length === 1) {
+                    const [target] = await enrichLendItemsWithAssetDetails(list);
+                    returnState.targetLending = target;
+                    returnState.searchResults = [];
+                    Router.to('return-input');
+                    return;
+                }
+
+                returnState.targetLending = null;
+                returnState.searchResults = await enrichLendItemsWithAssetDetails(list);
+                Router.to('return-select');
+            });
         } catch (error) {
             console.error('searchLending error:', error);
             showApiPageFeedback('return-search-feedback', error, '貸出検索に失敗しました。');
+        } finally {
+            isSearchingLending = false;
+            setControlsDisabled(['#return-search-query', '#return-search-back-btn'], false);
         }
     },
 
@@ -941,83 +1015,117 @@ window.LendReturnController = {
         }
 
         isSubmittingReturn = true;
+        setControlsDisabled(['#return-confirm-back-btn'], true);
 
         try {
             hidePageFeedback('return-confirm-feedback');
-            const payload = {
-                quantity: Number(returnState.inputData.returnQty || getLendQuantity(returnState.targetLending) || 1),
-                processed_by_id: returnState.inputData.returner,
-                note: returnState.inputData.note ? returnState.inputData.note : null
-            };
+            await runWithButtonLoading('#return-submit-btn', { busyText: '登録中...' }, async () => {
+                const payload = {
+                    quantity: Number(returnState.inputData.returnQty || getLendQuantity(returnState.targetLending) || 1),
+                    processed_by_id: returnState.inputData.returner,
+                    note: returnState.inputData.note ? returnState.inputData.note : null
+                };
 
-            console.log('submit return payload:', payload);
+                console.log('submit return payload:', payload);
 
-            await API.lending.returnAsset(lendKey, payload);
+                await API.lending.returnAsset(lendKey, payload);
 
-            returnState.targetLending = null;
-            returnState.searchResults = [];
-            returnState.inputData = {};
+                returnState.targetLending = null;
+                returnState.searchResults = [];
+                returnState.inputData = {};
 
-            if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-                CommonController.showComplete({
-                    message: '返却処理が完了しました',
-                    autoRedirectSeconds: 0,
-                    actions: [
-                        {
-                            label: '続けて返却登録',
-                            routeKey: 'return-search',
-                            style: 'primary-btn',
-                            clearHistory: true
-                        },
-                        {
-                            label: '返却メニューへ戻る',
-                            routeKey: 'return-menu',
-                            style: 'back-btn',
-                            clearHistory: true
-                        }
-                    ]
-                });
-            } else {
-                Router.to('return-search');
-            }
+                if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
+                    CommonController.showComplete({
+                        message: '返却処理が完了しました',
+                        autoRedirectSeconds: 0,
+                        actions: [
+                            {
+                                label: '続けて返却登録',
+                                routeKey: 'return-search',
+                                style: 'primary-btn',
+                                clearHistory: true
+                            },
+                            {
+                                label: '返却メニューへ戻る',
+                                routeKey: 'return-menu',
+                                style: 'back-btn',
+                                clearHistory: true
+                            }
+                        ]
+                    });
+                } else {
+                    Router.to('return-search');
+                }
+            });
         } catch (error) {
             console.error('submitReturn error:', error);
             showApiPageFeedback('return-confirm-feedback', error, '返却処理に失敗しました。');
         } finally {
             isSubmittingReturn = false;
+            setControlsDisabled(['#return-confirm-back-btn'], false);
         }
     },
 
     async changeLendHistoryPerPage(value) {
+        if (lendState.history.loading) {
+            return;
+        }
+
         lendState.history.itemsPerPage = Number(value);
+        lendState.history.currentPage = 1;
+        persistLendHistoryState();
         await this.loadLendHistory(1);
     },
 
     async changeLendHistoryFilter(value) {
+        if (lendState.history.loading) {
+            return;
+        }
+
         lendState.history.filter = value || 'all';
+        lendState.history.currentPage = 1;
+        persistLendHistoryState();
         await this.loadLendHistory(1);
     },
 
     async changeLendHistoryPage(page) {
+        if (lendState.history.loading) {
+            return;
+        }
+
         const targetPage = Number(page);
         if (targetPage < 1 || targetPage > lendState.history.totalPages) {
             return;
         }
 
+        lendState.history.currentPage = targetPage;
+        persistLendHistoryState();
         await this.loadLendHistory(targetPage);
     },
 
     async changeReturnHistoryPerPage(value) {
+        if (returnState.history.loading) {
+            return;
+        }
+
         returnState.history.itemsPerPage = Number(value);
+        returnState.history.currentPage = 1;
+        persistReturnHistoryState();
         await this.loadReturnHistory(1);
     },
 
     async changeReturnHistoryPage(page) {
+        if (returnState.history.loading) {
+            return;
+        }
+
         const targetPage = Number(page);
         if (targetPage < 1 || targetPage > returnState.history.totalPages) {
             return;
         }
 
+        returnState.history.currentPage = targetPage;
+        persistReturnHistoryState();
         await this.loadReturnHistory(targetPage);
     },
 
@@ -1033,6 +1141,7 @@ window.LendReturnController = {
             ...lendState.history,
             currentPage: page
         });
+        setHistoryControlsLoading('lend', true);
         if (pagination) {
             pagination.innerHTML = '';
         }
@@ -1052,6 +1161,7 @@ window.LendReturnController = {
 
             assignHistoryPage(lendState.history, response, page);
             lendState.history.items = await enrichLendItemsWithAssetDetails(lendState.history.items);
+            persistLendHistoryState();
             renderLendHistory();
         } catch (error) {
             console.error('loadLendHistory error:', error);
@@ -1066,6 +1176,8 @@ window.LendReturnController = {
             if (pagination) {
                 pagination.innerHTML = '';
             }
+        } finally {
+            setHistoryControlsLoading('lend', false);
         }
     },
 
@@ -1081,6 +1193,7 @@ window.LendReturnController = {
             ...returnState.history,
             currentPage: page
         });
+        setHistoryControlsLoading('return', true);
         if (pagination) {
             pagination.innerHTML = '';
         }
@@ -1093,6 +1206,7 @@ window.LendReturnController = {
 
             assignHistoryPage(returnState.history, response, page);
             returnState.history.items = await enrichReturnHistoryItems(returnState.history.items);
+            persistReturnHistoryState();
             renderReturnHistory();
         } catch (error) {
             console.error('loadReturnHistory error:', error);
@@ -1107,6 +1221,8 @@ window.LendReturnController = {
             if (pagination) {
                 pagination.innerHTML = '';
             }
+        } finally {
+            setHistoryControlsLoading('return', false);
         }
     },
 };
@@ -1211,8 +1327,10 @@ export function initLendReturn(view) {
     }
 
     if (view === 'lend-history') {
-        window.LendReturnController.loadLendHistory(1);
+        restoreLendHistoryState();
+        window.LendReturnController.loadLendHistory(lendState.history.currentPage);
     } else if (view === 'return-history') {
-        window.LendReturnController.loadReturnHistory(1);
+        restoreReturnHistoryState();
+        window.LendReturnController.loadReturnHistory(returnState.history.currentPage);
     }
 }

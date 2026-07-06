@@ -2,7 +2,9 @@ import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
 import { escapeHtml, toLocalDateTimeIso } from '../../js/dom_utils.js';
+import { confirmAction } from '../../js/ui_dialog.js';
 import { mountDeviceStatusPanel } from '../../js/device_status.js';
+import { runWithButtonLoading, setControlsDisabled } from '../../js/ui_loading.js';
 import { hidePageFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
 
 // =====================================
@@ -43,6 +45,7 @@ const batchImportState = {
     printConfig: null,
     results: null,
     committing: false,
+    previewing: false,
 };
 
 let simpleDetailRowSequence = 1;
@@ -79,6 +82,7 @@ const simpleBatchState = {
     printConfig: null,
     results: null,
     committing: false,
+    previewing: false,
 };
 
 function createDefaultTableRow() {
@@ -106,6 +110,7 @@ const tableBatchState = {
     printConfig: null,
     results: null,
     committing: false,
+    previewing: false,
 };
 
 async function loadNfcReader() {
@@ -169,6 +174,7 @@ function clearBatchImportState() {
     batchImportState.printConfig = null;
     batchImportState.results = null;
     batchImportState.committing = false;
+    batchImportState.previewing = false;
 
     sessionStorage.removeItem('last_import_print_config');
     sessionStorage.removeItem('last_import_results');
@@ -205,6 +211,7 @@ function clearSimpleBatchState() {
     simpleBatchState.printConfig = null;
     simpleBatchState.results = null;
     simpleBatchState.committing = false;
+    simpleBatchState.previewing = false;
     resetSimpleSerialGeneratorInputs();
 }
 
@@ -231,6 +238,7 @@ function clearTableBatchState() {
     tableBatchState.printConfig = null;
     tableBatchState.results = null;
     tableBatchState.committing = false;
+    tableBatchState.previewing = false;
 }
 
 function markTableBatchDirty(message = '入力内容が変更されました。プレビューを更新してください。') {
@@ -1473,16 +1481,18 @@ function renderBatchImportView() {
     }
 
     if (previewBtn) {
-        previewBtn.disabled = batchImportState.committing;
-        previewBtn.textContent = validation ? 'プレビューを更新' : 'プレビューを作成';
+        previewBtn.disabled = batchImportState.committing || batchImportState.previewing;
+        previewBtn.textContent = batchImportState.previewing
+            ? 'プレビュー作成中...'
+            : (validation ? 'プレビューを更新' : 'プレビューを作成');
     }
 
     if (resetBtn) {
-        resetBtn.disabled = batchImportState.committing || (!hasFile && !validation);
+        resetBtn.disabled = batchImportState.committing || batchImportState.previewing || (!hasFile && !validation);
     }
 
     if (commitBtn) {
-        const canCommit = Boolean(validation) && !validation.hasErrors && Boolean(batchImportState.importFile) && !batchImportState.committing;
+        const canCommit = Boolean(validation) && !validation.hasErrors && Boolean(batchImportState.importFile) && !batchImportState.committing && !batchImportState.previewing;
         commitBtn.disabled = !canCommit;
         commitBtn.textContent = batchImportState.committing ? '登録中...' : '登録を確定';
     }
@@ -1628,14 +1638,16 @@ function renderSimpleBatchPreviewView() {
         statusEl.innerHTML = `<div class="batch-status-banner ${escapeHtml(simpleBatchState.statusTone)}">${escapeHtml(simpleBatchState.statusMessage)}</div>`;
     }
     if (previewBtn) {
-        previewBtn.disabled = simpleBatchState.committing;
-        previewBtn.textContent = validation ? 'プレビューを更新' : 'プレビューを作成';
+        previewBtn.disabled = simpleBatchState.committing || simpleBatchState.previewing;
+        previewBtn.textContent = simpleBatchState.previewing
+            ? 'プレビュー作成中...'
+            : (validation ? 'プレビューを更新' : 'プレビューを作成');
     }
     if (resetBtn) {
-        resetBtn.disabled = simpleBatchState.committing;
+        resetBtn.disabled = simpleBatchState.committing || simpleBatchState.previewing;
     }
     if (commitBtn) {
-        const canCommit = Boolean(validation) && !validation.hasErrors && Boolean(simpleBatchState.importFile) && !simpleBatchState.committing;
+        const canCommit = Boolean(validation) && !validation.hasErrors && Boolean(simpleBatchState.importFile) && !simpleBatchState.committing && !simpleBatchState.previewing;
         commitBtn.disabled = !canCommit;
         commitBtn.textContent = simpleBatchState.committing ? '登録中...' : '登録を確定';
     }
@@ -1783,16 +1795,18 @@ function renderTableBatchPreviewView() {
     }
 
     if (previewBtn) {
-        previewBtn.disabled = tableBatchState.committing;
-        previewBtn.textContent = validation ? 'プレビューを更新' : 'プレビューを作成';
+        previewBtn.disabled = tableBatchState.committing || tableBatchState.previewing;
+        previewBtn.textContent = tableBatchState.previewing
+            ? 'プレビュー作成中...'
+            : (validation ? 'プレビューを更新' : 'プレビューを作成');
     }
 
     if (resetBtn) {
-        resetBtn.disabled = tableBatchState.committing;
+        resetBtn.disabled = tableBatchState.committing || tableBatchState.previewing;
     }
 
     if (commitBtn) {
-        const canCommit = Boolean(validation) && !validation.hasErrors && Boolean(tableBatchState.importFile) && !tableBatchState.committing;
+        const canCommit = Boolean(validation) && !validation.hasErrors && Boolean(tableBatchState.importFile) && !tableBatchState.committing && !tableBatchState.previewing;
         commitBtn.disabled = !canCommit;
         commitBtn.textContent = tableBatchState.committing ? '登録中...' : '登録を確定';
     }
@@ -1941,34 +1955,45 @@ window.RegController = {
     },
 
     async prepareSimpleBatchPreview() {
-        let rows;
-        try {
-            rows = buildRowsFromSimpleBatchState();
-            if (rows.length === 0) {
-                throw new Error('明細行を1件以上入力してください');
-            }
-        } catch (error) {
-            setSimpleBatchStatus('入力内容を確認してください。', 'error');
-            renderSimpleBatchView();
+        if (simpleBatchState.previewing) {
             return;
         }
 
-        const validation = validateBatchRows(rows);
-        const importFile = buildImportCsvFromValidatedRows(validation.rowResults);
-
-        simpleBatchState.validation = validation;
-        simpleBatchState.importFile = importFile;
-
-        if (validation.hasErrors) {
-            setSimpleBatchStatus('エラーがあるため登録できません。入力内容を修正してください。', 'error');
-        } else if (validation.hasWarnings) {
-            setSimpleBatchStatus('登録可能です。警告を確認してから「登録を確定」を押してください。', 'warning');
-        } else {
-            setSimpleBatchStatus('登録可能です。内容を確認してから「登録を確定」を押してください。', 'success');
-        }
-
+        simpleBatchState.previewing = true;
         renderSimpleBatchView();
-        document.getElementById('simple-preview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        let rows;
+        try {
+            try {
+                rows = buildRowsFromSimpleBatchState();
+                if (rows.length === 0) {
+                    throw new Error('明細行を1件以上入力してください');
+                }
+            } catch (error) {
+                setSimpleBatchStatus('入力内容を確認してください。', 'error');
+                renderSimpleBatchView();
+                return;
+            }
+
+            const validation = validateBatchRows(rows);
+            const importFile = buildImportCsvFromValidatedRows(validation.rowResults);
+
+            simpleBatchState.validation = validation;
+            simpleBatchState.importFile = importFile;
+
+            if (validation.hasErrors) {
+                setSimpleBatchStatus('エラーがあるため登録できません。入力内容を修正してください。', 'error');
+            } else if (validation.hasWarnings) {
+                setSimpleBatchStatus('登録可能です。警告を確認してから「登録を確定」を押してください。', 'warning');
+            } else {
+                setSimpleBatchStatus('登録可能です。内容を確認してから「登録を確定」を押してください。', 'success');
+            }
+
+            renderSimpleBatchView();
+            document.getElementById('simple-preview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } finally {
+            simpleBatchState.previewing = false;
+            renderSimpleBatchView();
+        }
     },
 
     resetSimpleBatchInput() {
@@ -2092,34 +2117,45 @@ window.RegController = {
     },
 
     async prepareTableBatchPreview() {
-        let rows;
-        try {
-            rows = buildRowsFromTableBatchState();
-            if (rows.length === 0) {
-                throw new Error('入力行を1件以上入力してください');
-            }
-        } catch (error) {
-            setTableBatchStatus('入力内容を確認してください。', 'error');
-            renderTableBatchView();
+        if (tableBatchState.previewing) {
             return;
         }
 
-        const validation = validateBatchRows(rows);
-        const importFile = buildImportCsvFromValidatedRows(validation.rowResults);
-
-        tableBatchState.validation = validation;
-        tableBatchState.importFile = importFile;
-
-        if (validation.hasErrors) {
-            setTableBatchStatus('エラーがあるため登録できません。入力内容を修正してください。', 'error');
-        } else if (validation.hasWarnings) {
-            setTableBatchStatus('登録可能です。警告を確認してから「登録を確定」を押してください。', 'warning');
-        } else {
-            setTableBatchStatus('登録可能です。内容を確認してから「登録を確定」を押してください。', 'success');
-        }
-
+        tableBatchState.previewing = true;
         renderTableBatchView();
-        document.getElementById('table-preview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        let rows;
+        try {
+            try {
+                rows = buildRowsFromTableBatchState();
+                if (rows.length === 0) {
+                    throw new Error('入力行を1件以上入力してください');
+                }
+            } catch (error) {
+                setTableBatchStatus('入力内容を確認してください。', 'error');
+                renderTableBatchView();
+                return;
+            }
+
+            const validation = validateBatchRows(rows);
+            const importFile = buildImportCsvFromValidatedRows(validation.rowResults);
+
+            tableBatchState.validation = validation;
+            tableBatchState.importFile = importFile;
+
+            if (validation.hasErrors) {
+                setTableBatchStatus('エラーがあるため登録できません。入力内容を修正してください。', 'error');
+            } else if (validation.hasWarnings) {
+                setTableBatchStatus('登録可能です。警告を確認してから「登録を確定」を押してください。', 'warning');
+            } else {
+                setTableBatchStatus('登録可能です。内容を確認してから「登録を確定」を押してください。', 'success');
+            }
+
+            renderTableBatchView();
+            document.getElementById('table-preview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } finally {
+            tableBatchState.previewing = false;
+            renderTableBatchView();
+        }
     },
 
     resetTableBatchInput() {
@@ -2268,47 +2304,51 @@ window.RegController = {
     async submit() {
         if (regState.submitting) return;
         regState.submitting = true;
+        setControlsDisabled(['#registration-confirm-back-btn'], true);
 
         try {
             hidePageFeedback('registration-confirm-feedback');
-            const payloads = buildPayloadsFromState();
-            if (!payloads) return;
+            await runWithButtonLoading('#registration-submit-btn', { busyText: '登録中...' }, async () => {
+                const payloads = buildPayloadsFromState();
+                if (!payloads) return;
 
-            const result = await executeRegistration(payloads);
-            const completeMessage = result.printFailed
-                ? `新規登録は完了しました。ラベル印刷は実行できませんでした。管理番号: ${result.managementNumber}`
-                : `新規登録とラベル印刷を開始しました。管理番号: ${result.managementNumber}`;
+                const result = await executeRegistration(payloads);
+                const completeMessage = result.printFailed
+                    ? `新規登録は完了しました。ラベル印刷は実行できませんでした。管理番号: ${result.managementNumber}`
+                    : `新規登録とラベル印刷を開始しました。管理番号: ${result.managementNumber}`;
 
-            regState.data = {};
-            regState.type = '';
+                regState.data = {};
+                regState.type = '';
 
-            if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-                CommonController.showComplete({
-                    message: completeMessage,
-                    autoRedirectSeconds: 0,
-                    actions: [
-                        {
-                            label: '続けて登録',
-                            routeKey: 'reg-select',
-                            style: 'primary-btn',
-                            clearHistory: true
-                        },
-                        {
-                            label: 'メニューへ戻る',
-                            routeKey: 'main-menu',
-                            style: 'back-btn',
-                            clearHistory: true
-                        }
-                    ]
-                });
-            } else {
-                Router.to('complete');
-            }
+                if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
+                    CommonController.showComplete({
+                        message: completeMessage,
+                        autoRedirectSeconds: 0,
+                        actions: [
+                            {
+                                label: '続けて登録',
+                                routeKey: 'reg-select',
+                                style: 'primary-btn',
+                                clearHistory: true
+                            },
+                            {
+                                label: 'メニューへ戻る',
+                                routeKey: 'main-menu',
+                                style: 'back-btn',
+                                clearHistory: true
+                            }
+                        ]
+                    });
+                } else {
+                    Router.to('complete');
+                }
+            });
         } catch (e) {
             console.error('登録エラー:', e);
             showApiPageFeedback('registration-confirm-feedback', e, '登録に失敗しました。');
         } finally {
             regState.submitting = false;
+            setControlsDisabled(['#registration-confirm-back-btn'], false);
         }
     },
 
@@ -2338,6 +2378,10 @@ window.RegController = {
 
     // 一括登録用 CSVプレビュー作成
     async prepareBatchPreview() {
+        if (batchImportState.previewing) {
+            return;
+        }
+
         const fileInput = document.getElementById('file-csv');
 
         if (!fileInput || fileInput.files.length === 0) {
@@ -2348,6 +2392,8 @@ window.RegController = {
 
         const originalFile = fileInput.files[0];
 
+        batchImportState.previewing = true;
+        renderBatchImportView();
         try {
             const preview = await buildBatchImportPreviewFromTemplateFile(originalFile);
             batchImportState.sourceFileName = originalFile.name;
@@ -2369,6 +2415,9 @@ window.RegController = {
             console.error('CSV変換エラー:', error);
             clearBatchPreviewState();
             setBatchStatus(`CSVの変換に失敗しました: ${error.message || 'テンプレート内容を確認してください'}`, 'error');
+            renderBatchImportView();
+        } finally {
+            batchImportState.previewing = false;
             renderBatchImportView();
         }
     },
@@ -2470,8 +2519,14 @@ window.RegController = {
             };
         }
 
-        // ここで確認ダイアログ
-        if (!confirm(`${labels.length} 件の登録に成功しました。\n続けてラベルを印刷しますか？`)) {
+        const shouldPrint = await confirmAction({
+            title: 'ラベル印刷確認',
+            message: `${labels.length} 件の登録に成功しました。\n続けてラベルを印刷しますか？`,
+            confirmLabel: '印刷する',
+            cancelLabel: '印刷しない'
+        });
+
+        if (!shouldPrint) {
             // キャンセルされたら印刷せず終了（呼び出し元に戻って完了画面へ）
             return {
                 tone: 'info',
@@ -2531,21 +2586,19 @@ window.RegController = {
             return;
         }
 
-        const btn = document.getElementById('jan-search-btn');
-        if (btn) { btn.disabled = true; btn.textContent = '検索中...'; }
-
+        setControlsDisabled(['#jan-input', '#toggle-manual-btn'], true);
         try {
-            const result = await API.assets.lookupJAN(janCode);
+            await runWithButtonLoading('#jan-search-btn', { busyText: '検索中...' }, async () => {
+                const result = await API.assets.lookupJAN(janCode);
 
-            // 取得した値をセット
-            if (result.name) nameInput.value = result.name;
-            if (result.manufacturer) makerInput.value = result.manufacturer;
-            hidePageFeedback('registration-step1-feedback');
+                if (result.name) nameInput.value = result.name;
+                if (result.manufacturer) makerInput.value = result.manufacturer;
+                hidePageFeedback('registration-step1-feedback');
 
-            // ★検索成功したら、隠れていたフォームを自動で開く
-            this.toggleManualInput(true);
+                this.toggleManualInput(true);
 
-            if (modelInput) modelInput.focus();
+                if (modelInput) modelInput.focus();
+            });
 
         } catch (error) {
             console.error('JAN Lookup Error:', error);
@@ -2556,7 +2609,7 @@ window.RegController = {
             this.toggleManualInput(true);
             if (nameInput) nameInput.focus();
         } finally {
-            if (btn) { btn.disabled = false; btn.textContent = '検索'; }
+            setControlsDisabled(['#jan-input', '#toggle-manual-btn'], false);
         }
     },
 };

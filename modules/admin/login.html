@@ -1,6 +1,6 @@
 <div class="screen-content">
     <h2>管理者ログイン画面</h2>
-    <p id="login-error-msg" class="form-feedback"></p>
+    <div id="admin-login-feedback" class="batch-status-banner info page-feedback" hidden></div>
 
     <form id="form-admin-login" onsubmit="event.preventDefault(); AdminController.login();">
         <div class="form-group">
@@ -17,7 +17,7 @@
     </form>
 
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.to('main-menu')">戻る</button>
-        <button class="primary-btn" onclick="AdminController.login()">ログイン</button>
+        <button id="admin-login-back-btn" class="back-btn" onclick="Router.to('main-menu')">戻る</button>
+        <button id="admin-login-btn" class="primary-btn" onclick="AdminController.login()">ログイン</button>
     </div>
 </div>

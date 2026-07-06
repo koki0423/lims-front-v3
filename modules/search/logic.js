@@ -3,7 +3,9 @@ import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
 import { escapeHtml } from '../../js/dom_utils.js';
 import { mountAssetPreview } from '../../js/asset_preview.js';
+import { runWithButtonLoading, setControlsDisabled } from '../../js/ui_loading.js';
 import { hidePageFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
+import { loadViewState, saveViewState } from '../../js/view_state.js';
 
 // === 定数定義 ===
 // ステータス定義 (ID -> 表示名)
@@ -16,6 +18,8 @@ const STATUS_MAP = {
     6: { name: '紛失', class: 'badge-error' }
 };
 
+const SEARCH_VIEW_STATE_KEY = 'search-view';
+
 // === 状態管理オブジェクト ===
 const searchState = {
     result: null,       // 検索結果1件をここに保持
@@ -23,8 +27,82 @@ const searchState = {
     displayList: [],    // 画面に表示している、フィルタ・ソート済みのデータ
     currentFilter: null,// フィルタ状態 (null=全表示)
     sortKey: null,      // 'mgmt', 'name', 'status', 'location' など
-    sortOrder: 'asc'    // 'asc'(昇順) か 'desc'(降順)
+    sortOrder: 'asc',   // 'asc'(昇順) か 'desc'(降順)
+    query: {
+        itemId: '',
+        name: ''
+    },
+    searching: false
 };
+
+function persistSearchState() {
+    saveViewState(SEARCH_VIEW_STATE_KEY, {
+        query: searchState.query,
+        currentFilter: searchState.currentFilter,
+        sortKey: searchState.sortKey,
+        sortOrder: searchState.sortOrder,
+        candidates: searchState.candidates
+    });
+}
+
+function restoreSearchState() {
+    const persisted = loadViewState(SEARCH_VIEW_STATE_KEY, {});
+    searchState.query = {
+        itemId: persisted.query?.itemId || '',
+        name: persisted.query?.name || ''
+    };
+    searchState.currentFilter = persisted.currentFilter ?? null;
+    searchState.sortKey = persisted.sortKey || null;
+    searchState.sortOrder = persisted.sortOrder === 'desc' ? 'desc' : 'asc';
+    searchState.candidates = Array.isArray(persisted.candidates) ? persisted.candidates : searchState.candidates;
+}
+
+function syncSearchQueryFromInputs() {
+    const idInput = document.querySelector('input[name="itemId"]');
+    const nameInput = document.getElementById('search-name');
+
+    searchState.query.itemId = idInput ? idInput.value.trim() : '';
+    searchState.query.name = nameInput ? nameInput.value.trim() : '';
+}
+
+function applySearchQueryToInputs() {
+    const idInput = document.querySelector('input[name="itemId"]');
+    const nameInput = document.getElementById('search-name');
+
+    if (idInput) {
+        idInput.value = searchState.query.itemId || '';
+    }
+    if (nameInput) {
+        nameInput.value = searchState.query.name || '';
+    }
+}
+
+function bindSearchInputPersistence() {
+    const idInput = document.querySelector('input[name="itemId"]');
+    const nameInput = document.getElementById('search-name');
+    const inputs = [idInput, nameInput];
+
+    for (let i = 0; i < inputs.length; i += 1) {
+        const input = inputs[i];
+        if (!input || input.dataset.searchStateBound === '1') {
+            continue;
+        }
+
+        input.dataset.searchStateBound = '1';
+        input.addEventListener('input', () => {
+            syncSearchQueryFromInputs();
+            persistSearchState();
+        });
+    }
+}
+
+function setSearchBusy(isBusy) {
+    setControlsDisabled([
+        'input[name="itemId"]',
+        '#search-name',
+        '#search-back-btn'
+    ], isBusy);
+}
 
 // === ヘルパー関数 ===
 function genreById(id) {
@@ -69,59 +147,68 @@ function formatPairData(data) {
 // === コントローラー ===
 window.SearchController = {
     async performSearch() {
-        searchState.result = null;
-        searchState.candidates = [];
-        searchState.currentFilter = null;
-        hidePageFeedback('search-feedback');
-
-        const idInput = document.querySelector('input[name="itemId"]'); // 備品番号
-        const nameInput = document.getElementById('search-name');       // 備品名
-
-        const idQuery = idInput ? idInput.value.trim() : '';
-        const nameQuery = nameInput ? nameInput.value.trim() : '';
-
-        if (!idQuery && !nameQuery) {
-            showPageFeedback('search-feedback', '検索条件を入力してください。', 'error');
+        if (searchState.searching) {
             return;
         }
 
+        searchState.searching = true;
+        hidePageFeedback('search-feedback');
+        setSearchBusy(true);
+
         try {
-            let results = [];
+            await runWithButtonLoading('#search-submit-btn', { busyText: '検索中...' }, async () => {
+                searchState.result = null;
+                searchState.candidates = [];
+                searchState.displayList = [];
+                searchState.currentFilter = null;
+                searchState.sortKey = null;
+                searchState.sortOrder = 'asc';
 
-            // A. 管理番号検索 (1件または0件想定だが、配列で受け取る設計にしておくと汎用的)
-            if (idQuery) {
-                // APIが単一オブジェクトを返す場合は [] で囲む、配列ならそのまま
-                const res = await API.assets.getPair(idQuery);
-                results = Array.isArray(res) ? res : [res];
-            }
-            // B. 名前検索 (複数件ヒットするエンドポイント)
-            else if (nameQuery) {
-                // GET /api/v2/assets/search?name=xxx
-                results = await API.assets.searchByName(nameQuery);
-            }
+                syncSearchQueryFromInputs();
+                persistSearchState();
 
-            if (!results || results.length === 0) {
-                showPageFeedback('search-feedback', '該当する備品は見つかりませんでした。', 'warning');
-                return;
-            }
+                const idQuery = searchState.query.itemId;
+                const nameQuery = searchState.query.name;
 
-            await AppState.loadGenres({ all: true });
+                if (!idQuery && !nameQuery) {
+                    showPageFeedback('search-feedback', '検索条件を入力してください。', 'error');
+                    return;
+                }
 
-            // === 分岐ロジック ===
-            if (results.length === 1) {
-                // 1件だけなら、直接詳細画面へ (UX向上)
-                // formatPairDataを通して整形し、stateにセット
-                searchState.result = formatPairData(results[0]);
-                Router.to('search-result'); // 詳細画面へ
-            } else {
-                // 複数件なら、候補リストをstateに保存して一覧画面へ
-                searchState.candidates = results;
-                Router.to('search-list');   // 一覧画面へ (router.jsへの登録が必要)
-            }
+                let results = [];
 
+                if (idQuery) {
+                    const res = await API.assets.getPair(idQuery);
+                    results = Array.isArray(res) ? res : [res];
+                } else if (nameQuery) {
+                    results = await API.assets.searchByName(nameQuery);
+                }
+
+                if (!results || results.length === 0) {
+                    persistSearchState();
+                    showPageFeedback('search-feedback', '該当する備品は見つかりませんでした。', 'warning');
+                    return;
+                }
+
+                await AppState.loadGenres({ all: true });
+
+                if (results.length === 1) {
+                    searchState.result = formatPairData(results[0]);
+                    searchState.candidates = [];
+                    persistSearchState();
+                    Router.to('search-result');
+                } else {
+                    searchState.candidates = results;
+                    persistSearchState();
+                    Router.to('search-list');
+                }
+            });
         } catch (e) {
             console.error(e);
             showApiPageFeedback('search-feedback', e, '検索中にエラーが発生しました。');
+        } finally {
+            searchState.searching = false;
+            setSearchBusy(false);
         }
     },
     // フィルタ切り替え
@@ -132,6 +219,7 @@ window.SearchController = {
             searchState.currentFilter = status;
         }
 
+        persistSearchState();
         initSearchList();
         this.updateFilterStyles();
     },
@@ -156,6 +244,7 @@ window.SearchController = {
             searchState.sortKey = key;
             searchState.sortOrder = 'asc';
         }
+        persistSearchState();
         initSearchList(); // 再描画
     },
 
@@ -170,6 +259,7 @@ window.SearchController = {
 
         // フォーマットして詳細画面用Stateにセット
         searchState.result = formatPairData(rawData);
+        persistSearchState();
         Router.to('search-result');
     },
 
@@ -181,9 +271,11 @@ window.SearchController = {
         // 候補リスト(candidates)を持っているかチェック
         if (searchState.candidates && searchState.candidates.length > 0) {
             // 一覧経由できた場合 -> 一覧画面に戻る
+            persistSearchState();
             Router.to('search-list');
         } else {
             // 直接1件ヒットした場合 -> 検索トップに戻る
+            persistSearchState();
             Router.to('search-top');
         }
     }
@@ -192,7 +284,10 @@ window.SearchController = {
 // === 画面初期化 (result.html 表示時) ===
 export function initSearch(view) {
     if (view === 'input') {
+        restoreSearchState();
         hidePageFeedback('search-feedback');
+        applySearchQueryToInputs();
+        bindSearchInputPersistence();
         mountAssetPreview('input[name="itemId"]', 'search-asset-preview', {
             emptyMessage: '備品番号を入力すると、検索前に備品情報を確認できます。'
         });
@@ -282,6 +377,10 @@ export function initSearch(view) {
 export function initSearchList() {
     const tbody = document.getElementById('search-candidates-body');
     if (!tbody) return;
+
+    if (!searchState.candidates || searchState.candidates.length === 0) {
+        restoreSearchState();
+    }
     hidePageFeedback('search-list-feedback');
 
     // ボタンのスタイル初期化
@@ -367,6 +466,7 @@ export function initSearchList() {
     }).join('');
 
     updateSortArrows();
+    persistSearchState();
 }
 
 function updateSortArrows() {

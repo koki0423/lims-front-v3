@@ -5,7 +5,7 @@
         <div id="item-list-device-status"></div>
     </div>
 
-    <div class="filters-container">
+    <div id="item-list-filter-controls" class="filters-container">
         <label>絞り込み:</label>
         <button class="filter-btn" data-status="1" onclick="ItemListController.toggleFilter('1')">正常</button>
         <button class="filter-btn" data-status="2" onclick="ItemListController.toggleFilter('2')">故障</button>
@@ -17,7 +17,7 @@
     <div class="pagination-container">
         <div class="rows-per-page">
             <label>表示件数:</label>
-            <select onchange="ItemListController.changePerPage(this.value)">
+            <select id="item-list-per-page" onchange="ItemListController.changePerPage(this.value)">
                 <option value="10">10件</option>
                 <option value="20" selected>20件</option>
                 <option value="50">50件</option>
@@ -107,7 +107,7 @@
 
             <div class="modal-buttons">
                 <button type="button" class="back-btn" onclick="ItemListController.closeModal()">閉じる</button>
-                <button type="submit" class="primary-btn">更新登録</button>
+                <button id="item-update-btn" type="submit" class="primary-btn">更新登録</button>
             </div>
         </form>
     </div>

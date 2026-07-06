@@ -4,7 +4,9 @@ import { escapeHtml, toDateInputValue } from '../../js/dom_utils.js';
 import { normalizePageResponse } from '../../js/pagination_utils.js';
 import { mountAssetPreview } from '../../js/asset_preview.js';
 import { mountDeviceStatusPanel } from '../../js/device_status.js';
+import { runWithButtonLoading, setControlsDisabled } from '../../js/ui_loading.js';
 import { clearFeedbackInContainer, clearFieldFeedback, hidePageFeedback, setFieldFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
+import { loadViewState, saveViewState } from '../../js/view_state.js';
 
 // 廃棄機能の状態管理
 const disposalState = {
@@ -17,11 +19,39 @@ const historyState = {
     currentPage: 1,
     itemsPerPage: 20,
     totalPages: 1,
-    totalItems: 0
+    totalItems: 0,
+    loading: false
 };
+
+const DISPOSAL_HISTORY_VIEW_STATE_KEY = 'disposal-history-view';
 
 async function loadNfcReader() {
     return import('../../js/nfcReader.js');
+}
+
+function restoreDisposalHistoryState() {
+    const persisted = loadViewState(DISPOSAL_HISTORY_VIEW_STATE_KEY, {});
+    historyState.currentPage = Math.max(1, Number(persisted.currentPage) || 1);
+
+    const itemsPerPage = Number(persisted.itemsPerPage);
+    if ([10, 20, 50].includes(itemsPerPage)) {
+        historyState.itemsPerPage = itemsPerPage;
+    }
+}
+
+function persistDisposalHistoryState() {
+    saveViewState(DISPOSAL_HISTORY_VIEW_STATE_KEY, {
+        currentPage: historyState.currentPage,
+        itemsPerPage: historyState.itemsPerPage
+    });
+}
+
+function setDisposalHistoryLoading(isLoading) {
+    historyState.loading = isLoading;
+    setControlsDisabled([
+        '#disposal-history-per-page',
+        '#disposal-history-pagination .page-btn'
+    ], isLoading);
 }
 
 function displayDisposalValue(value, fallback = '-') {
@@ -203,6 +233,7 @@ async function loadDisposalHistoryPage(page = 1) {
     list.innerHTML = renderDisposalHistoryLoadingState();
     historyState.currentPage = safePage;
     updateDisposalHistorySummary();
+    setDisposalHistoryLoading(true);
     if (pagination) {
         pagination.innerHTML = '';
     }
@@ -222,6 +253,7 @@ async function loadDisposalHistoryPage(page = 1) {
         historyState.currentPage = Math.min(safePage, normalized.totalPages);
         historyState.totalItems = normalized.totalItems;
         historyState.totalPages = normalized.totalPages;
+        persistDisposalHistoryState();
 
         renderTable();
     } catch (error) {
@@ -238,6 +270,8 @@ async function loadDisposalHistoryPage(page = 1) {
         }
         updateDisposalHistorySummary();
         setDisposalHistoryStatus('廃棄履歴の読み込みに失敗しました。', 'error');
+    } finally {
+        setDisposalHistoryLoading(false);
     }
 }
 
@@ -348,51 +382,67 @@ window.DisposalController = {
         };
 
         disposalState.submitting = true;
+        setControlsDisabled(['#disposal-confirm-back-btn'], true);
         try {
-            await API.disposal.register(mgmt, payload);
-            disposalState.data = {};
+            await runWithButtonLoading('#disposal-submit-btn', { busyText: '登録中...' }, async () => {
+                await API.disposal.register(mgmt, payload);
+                disposalState.data = {};
 
-            if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-                CommonController.showComplete({
-                    message: '廃棄登録が完了しました',
-                    autoRedirectSeconds: 0,
-                    actions: [
-                        {
-                            label: '続けて廃棄登録',
-                            routeKey: 'disposal-input',
-                            style: 'primary-btn',
-                            clearHistory: true
-                        },
-                        {
-                            label: '廃棄メニューへ戻る',
-                            routeKey: 'disposal-top',
-                            style: 'back-btn',
-                            clearHistory: true
-                        }
-                    ]
-                });
-            } else {
-                Router.to('disposal-input');
-            }
+                if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
+                    CommonController.showComplete({
+                        message: '廃棄登録が完了しました',
+                        autoRedirectSeconds: 0,
+                        actions: [
+                            {
+                                label: '続けて廃棄登録',
+                                routeKey: 'disposal-input',
+                                style: 'primary-btn',
+                                clearHistory: true
+                            },
+                            {
+                                label: '廃棄メニューへ戻る',
+                                routeKey: 'disposal-top',
+                                style: 'back-btn',
+                                clearHistory: true
+                            }
+                        ]
+                    });
+                } else {
+                    Router.to('disposal-input');
+                }
+            });
         } catch (error) {
             console.error('Disposal Submit error:', error);
             showApiPageFeedback('disposal-confirm-feedback', error, '廃棄登録中にエラーが発生しました。');
         } finally {
             disposalState.submitting = false;
+            setControlsDisabled(['#disposal-confirm-back-btn'], false);
         }
     },
 
     async changePerPage(val) {
+        if (historyState.loading) {
+            return;
+        }
+
         historyState.itemsPerPage = Number(val);
+        historyState.currentPage = 1;
+        persistDisposalHistoryState();
         await loadDisposalHistoryPage(1);
     },
 
     async changePage(page) {
+        if (historyState.loading) {
+            return;
+        }
+
         const targetPage = Number(page);
         if (targetPage < 1 || targetPage > historyState.totalPages) {
             return;
         }
 
+        historyState.currentPage = targetPage;
+        persistDisposalHistoryState();
         await loadDisposalHistoryPage(targetPage);
     }
 };
@@ -450,12 +500,13 @@ function restoreFormData(form, data) {
 }
 
 export async function initDisposalHistory() {
+    restoreDisposalHistoryState();
     const list = document.getElementById('disposal-history-list');
     if (list) {
         list.innerHTML = '';
     }
 
-    await loadDisposalHistoryPage(1);
+    await loadDisposalHistoryPage(historyState.currentPage);
 }
 
 function renderTable() {

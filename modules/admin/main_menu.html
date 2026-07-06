@@ -1,8 +1,9 @@
 <div class="screen-content">
     <h2>管理者メイン画面</h2>
+    <div id="admin-main-feedback" class="batch-status-banner info page-feedback" hidden></div>
 
     <div class="menu-grid two-col">
-        <button class="menu-btn" onclick="alert('マスタ編集は必要に応じて機能追加')">
+        <button class="menu-btn" onclick="AdminController.showMasterEditNotice()">
             マスタ編集<br>
             <span class="sub-text sub-text-muted">(削除はできません)</span>
         </button>
@@ -14,13 +15,9 @@
         <button class="menu-btn" onclick="AdminController.toRegister()">
             ユーザー登録
         </button>
-
-        <!-- <button class="menu-btn" onclick="alert('必要に応じて機能追加')">
-            Blank
-        </button> -->
     </div>
 
     <div class="nav-buttons">
-        <button class="back-btn" onclick="AdminController.logout()">ログアウト</button>
+        <button id="admin-logout-btn" class="back-btn" onclick="AdminController.logout()">ログアウト</button>
     </div>
 </div>

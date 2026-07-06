@@ -227,14 +227,31 @@ const routes = {
     },
 
     // === 管理者機能 ===
-    'admin-login': { path: 'modules/admin/login.html', title: '管理者ログイン', loader: loadAdminModule },
-    'admin-main': { path: 'modules/admin/main_menu.html', title: '管理者メニュー', requiresAuth: true, loader: loadAdminModule },
-    'admin-register': { path: 'modules/admin/register.html', title: '管理者追加登録', requiresAuth: true, loader: loadAdminModule },
+    'admin-login': {
+        path: 'modules/admin/login.html',
+        title: '管理者ログイン',
+        loader: loadAdminModule,
+        init: (module) => module.initAdmin('login')
+    },
+    'admin-main': {
+        path: 'modules/admin/main_menu.html',
+        title: '管理者メニュー',
+        requiresAuth: true,
+        loader: loadAdminModule,
+        init: (module) => module.initAdmin('main')
+    },
+    'admin-register': {
+        path: 'modules/admin/register.html',
+        title: '管理者追加登録',
+        requiresAuth: true,
+        loader: loadAdminModule,
+        init: (module) => module.initAdmin('register')
+    },
     'admin-genres': {
         path: 'modules/admin/genre_list.html', title: '備品ジャンル管理',
         requiresAuth: true,
         loader: loadAdminModule,
-        init: () => window.AdminController.initGenreMaster()
+        init: (module) => module.initAdmin('genres')
     },
 
 };
