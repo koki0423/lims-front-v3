@@ -16,4 +16,68 @@
 .complete-note {
     margin-bottom: 40px;
     color: #666;
+    white-space: pre-line;
+}
+
+.complete-note[hidden] {
+    display: none !important;
+}
+
+.screen-tools-stack {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.page-feedback {
+    margin-bottom: 0;
+}
+
+.asset-preview-card {
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid #dde4df;
+    border-radius: 10px;
+}
+
+.asset-preview-card strong {
+    display: block;
+    margin-bottom: 10px;
+    color: #244532;
+}
+
+.asset-preview-card p {
+    margin: 0;
+    color: #5b665e;
+    line-height: 1.6;
+}
+
+.asset-preview-grid {
+    display: grid;
+    gap: 10px 14px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.asset-preview-row {
+    display: grid;
+    gap: 4px;
+}
+
+.asset-preview-label {
+    color: #66736b;
+    font-size: 0.85rem;
+}
+
+.asset-preview-loading {
+    background: #fafcfa;
+}
+
+.asset-preview-warning {
+    background: #fffaf0;
+    border-color: #ecd8a9;
+}
+
+.asset-preview-error {
+    background: #fff4f4;
+    border-color: #efcaca;
 }

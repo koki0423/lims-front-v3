@@ -8,6 +8,7 @@
     <div class="registration-page-lead">
         まずは備品の基本情報を入力します。詳細情報とラベル設定は次のページで入力します。
     </div>
+    <div id="registration-step1-feedback" class="batch-status-banner info page-feedback" hidden></div>
     <form id="form-reg-1">
         <div class="form-group registration-section-card">
             <label>入力方法</label>
@@ -63,7 +64,7 @@
     </form>
 
     <div class="nav-buttons registration-nav-buttons">
-        <button class="back-btn" onclick="Router.to('reg-select')">戻る</button>
+        <button class="back-btn" onclick="Router.back('reg-select')">戻る</button>
         <button class="next-btn" onclick="RegController.saveStep1()">次へ</button>
     </div>
 </div>

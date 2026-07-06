@@ -2,6 +2,9 @@ import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { escapeHtml, toDateInputValue } from '../../js/dom_utils.js';
 import { normalizePageResponse } from '../../js/pagination_utils.js';
+import { mountAssetPreview } from '../../js/asset_preview.js';
+import { mountDeviceStatusPanel } from '../../js/device_status.js';
+import { clearFeedbackInContainer, clearFieldFeedback, hidePageFeedback, setFieldFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
 
 // 廃棄機能の状態管理
 const disposalState = {
@@ -264,6 +267,8 @@ window.DisposalController = {
                 input.value = result.studentId;
                 input.dispatchEvent(new Event("input", { bubbles: true }));
                 input.dispatchEvent(new Event("change", { bubbles: true }));
+                clearFieldFeedback(input);
+                hidePageFeedback('disposal-feedback');
                 return;
             }
 
@@ -272,24 +277,39 @@ window.DisposalController = {
             }
 
             input.value = "";
-            alert('NFC読み取り失敗: ' + result.error);
+            showPageFeedback('disposal-feedback', 'NFC読み取り失敗: ' + result.error, 'error');
         } catch (err) {
             console.error("scan error:", err);
             input.value = "";
-            alert('NFC読み取り中にエラーが発生しました: ' + (err instanceof Error ? err.message : String(err)));
+            showPageFeedback(
+                'disposal-feedback',
+                'NFC読み取り中にエラーが発生しました: ' + (err instanceof Error ? err.message : String(err)),
+                'error'
+            );
         }
     },
 
     async toConfirm() {
         const form = document.getElementById('form-disposal');
-        if (!form || !form.reportValidity()) return;
+        if (!form) return;
+
+        hidePageFeedback('disposal-feedback');
+        clearFeedbackInContainer(form);
+        if (!form.reportValidity()) {
+            showPageFeedback('disposal-feedback', '入力内容を確認してください。', 'error');
+            return;
+        }
 
         const formData = new FormData(form);
         const rawMgmt = formData.get('itemId') || '';
         const mgmt = normalizeMgmtInput(rawMgmt);
 
         if (!mgmt) {
-            alert('備品番号を入力してください');
+            const itemInput = form.querySelector('input[name="itemId"]');
+            if (itemInput) {
+                setFieldFeedback(itemInput, '備品番号を入力してください。');
+            }
+            showPageFeedback('disposal-feedback', '備品番号を入力してください。', 'error');
             return;
         }
 
@@ -300,7 +320,11 @@ window.DisposalController = {
         disposalState.data.reason = formData.get('reason') || '';
 
         if (!disposalState.data.registrant) {
-            alert('登録者(学生証)を入力してください（NFC読み取り）');
+            const registrantInput = form.querySelector('input[name="registrant"]');
+            if (registrantInput) {
+                setFieldFeedback(registrantInput, '登録者(学生証)を入力してください。');
+            }
+            showPageFeedback('disposal-feedback', '登録者(学生証)を入力してください。', 'error');
             return;
         }
 
@@ -313,7 +337,7 @@ window.DisposalController = {
         const data = disposalState.data;
         const mgmt = normalizeMgmtInput(data.itemId);
         if (!mgmt) {
-            alert('管理番号が不正です');
+            showPageFeedback('disposal-confirm-feedback', '管理番号が不正です。', 'error');
             return;
         }
 
@@ -329,15 +353,30 @@ window.DisposalController = {
             disposalState.data = {};
 
             if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-                CommonController.showComplete('廃棄登録が完了しました');
+                CommonController.showComplete({
+                    message: '廃棄登録が完了しました',
+                    autoRedirectSeconds: 0,
+                    actions: [
+                        {
+                            label: '続けて廃棄登録',
+                            routeKey: 'disposal-input',
+                            style: 'primary-btn',
+                            clearHistory: true
+                        },
+                        {
+                            label: '廃棄メニューへ戻る',
+                            routeKey: 'disposal-top',
+                            style: 'back-btn',
+                            clearHistory: true
+                        }
+                    ]
+                });
             } else {
-                alert('廃棄登録が完了しました');
                 Router.to('disposal-input');
             }
         } catch (error) {
             console.error('Disposal Submit error:', error);
-            const message = error?.response?.data?.error || '廃棄登録中にエラーが発生しました。';
-            alert(message);
+            showApiPageFeedback('disposal-confirm-feedback', error, '廃棄登録中にエラーが発生しました。');
         } finally {
             disposalState.submitting = false;
         }
@@ -363,6 +402,8 @@ export function initDisposal(view) {
         const form = document.getElementById('form-disposal');
         if (!form) return;
 
+        hidePageFeedback('disposal-feedback');
+
         if (Object.keys(disposalState.data).length > 0) {
             restoreFormData(form, disposalState.data);
         } else {
@@ -373,7 +414,16 @@ export function initDisposal(view) {
                 disposalState.data.date = today;
             }
         }
+
+        mountDeviceStatusPanel('disposal-device-status', {
+            title: '利用機器',
+            devices: ['nfc']
+        });
+        mountAssetPreview('input[name="itemId"]', 'disposal-asset-preview', {
+            emptyMessage: '備品番号を入力すると、廃棄前に対象備品を確認できます。'
+        });
     } else if (view === 'confirm') {
+        hidePageFeedback('disposal-confirm-feedback');
         const display = document.getElementById('disp-confirm-view');
         if (!display) return;
 

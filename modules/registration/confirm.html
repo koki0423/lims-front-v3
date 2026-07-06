@@ -8,6 +8,10 @@
     <div class="registration-page-lead">
         入力した内容を確認してから登録してください。
     </div>
+    <div class="screen-tools-stack">
+        <div id="registration-confirm-feedback" class="batch-status-banner info page-feedback" hidden></div>
+        <div id="registration-confirm-device-status"></div>
+    </div>
 
     <div class="form-group registration-section-card">
         <label>登録前確認</label>
@@ -15,7 +19,7 @@
     </div>
 
     <div class="nav-buttons registration-nav-buttons">
-        <button class="back-btn" onclick="Router.to('reg-input-2')">戻る</button>
+        <button class="back-btn" onclick="Router.back('reg-input-2')">戻る</button>
         <button class="primary-btn" onclick="RegController.submit()">登録</button>
     </div>
 </div>

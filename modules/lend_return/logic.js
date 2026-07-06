@@ -2,6 +2,9 @@ import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { escapeHtml, toDateInputValue } from '../../js/dom_utils.js';
 import { normalizePageResponse } from '../../js/pagination_utils.js';
+import { mountAssetPreview } from '../../js/asset_preview.js';
+import { mountDeviceStatusPanel } from '../../js/device_status.js';
+import { clearFeedbackInContainer, clearFieldFeedback, hidePageFeedback, setFieldFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
 
 const lendState = {
     data: {},
@@ -34,6 +37,13 @@ const lendAssetDetailsCache = new Map();
 const lendAssetDetailsRequestCache = new Map();
 const lendRecordCache = new Map();
 const lendRecordRequestCache = new Map();
+const LEND_RETURN_FEEDBACK_IDS = [
+    'lend-input-feedback',
+    'return-input-feedback',
+    'return-search-feedback',
+    'lend-confirm-feedback',
+    'return-confirm-feedback'
+];
 
 async function loadNfcReader() {
     return import('../../js/nfcReader.js');
@@ -138,6 +148,24 @@ function displayHistoryValue(value, fallback = '-') {
 
     const text = String(value).trim();
     return text === '' ? fallback : text;
+}
+
+function getActiveFeedbackId() {
+    return LEND_RETURN_FEEDBACK_IDS.find((id) => document.getElementById(id)) || '';
+}
+
+function clearActiveFeedback() {
+    const feedbackId = getActiveFeedbackId();
+    if (feedbackId) {
+        hidePageFeedback(feedbackId);
+    }
+}
+
+function showActiveFeedback(message, tone = 'info') {
+    const feedbackId = getActiveFeedbackId();
+    if (feedbackId) {
+        showPageFeedback(feedbackId, message, tone);
+    }
 }
 
 function isTruthyFlag(value) {
@@ -504,9 +532,8 @@ function renderReturnHistoryTable(items) {
     `;
 }
 
-function showApiError(error, fallbackMessage) {
-    const message = error?.response?.data?.message || error?.response?.data?.error || fallbackMessage;
-    alert(message);
+function getApiErrorMessage(error, fallbackMessage) {
+    return error?.response?.data?.message || error?.response?.data?.error || fallbackMessage;
 }
 
 function assignHistoryPage(historyState, response, page) {
@@ -527,8 +554,11 @@ function renderReturnSelection() {
         return;
     }
 
+    hidePageFeedback('return-select-feedback');
+
     if (!returnState.searchResults || returnState.searchResults.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="table-empty-state">候補がありません</td></tr>';
+        showPageFeedback('return-select-feedback', '返却候補がありません。再検索してください。', 'warning');
         return;
     }
 
@@ -649,6 +679,19 @@ function renderHistoryPagination(container, totalPages, currentPage, type) {
     container.innerHTML = html;
 }
 
+function restoreNamedFormValues(form, data) {
+    if (!form || !data) {
+        return;
+    }
+
+    Object.keys(data).forEach((key) => {
+        const input = form.querySelector(`[name="${key}"]`);
+        if (input) {
+            input.value = data[key];
+        }
+    });
+}
+
 window.LendReturnController = {
     async NfcRead(targetName) {
         const input = document.querySelector('input[name="' + targetName + '"]');
@@ -666,6 +709,7 @@ window.LendReturnController = {
                 input.value = result.studentId;
                 input.dispatchEvent(new Event('input', { bubbles: true }));
                 input.dispatchEvent(new Event('change', { bubbles: true }));
+                clearActiveFeedback();
                 return;
             }
 
@@ -673,16 +717,26 @@ window.LendReturnController = {
                 return;
             }
 
-            alert('NFC読み取り失敗: ' + result.error);
+            showActiveFeedback('NFC読み取り失敗: ' + result.error, 'error');
         } catch (error) {
             console.error('scan error:', error);
-            alert('NFC読み取り中にエラーが発生しました: ' + (error instanceof Error ? error.message : String(error)));
+            showActiveFeedback(
+                'NFC読み取り中にエラーが発生しました: ' + (error instanceof Error ? error.message : String(error)),
+                'error'
+            );
         }
     },
 
     async saveLendInput() {
         const form = document.getElementById('form-lend');
-        if (!form || !form.reportValidity()) {
+        if (!form) {
+            return;
+        }
+
+        hidePageFeedback('lend-input-feedback');
+        clearFeedbackInContainer(form);
+        if (!form.reportValidity()) {
+            showPageFeedback('lend-input-feedback', '入力内容を確認してください。', 'error');
             return;
         }
 
@@ -699,7 +753,11 @@ window.LendReturnController = {
             Router.to('lend-confirm');
         } catch (error) {
             console.error('saveLendInput asset lookup error:', error);
-            showApiError(error, '備品情報の取得に失敗しました');
+            const itemInput = form.querySelector('input[name="itemId"]');
+            if (itemInput) {
+                setFieldFeedback(itemInput, getApiErrorMessage(error, '備品情報の取得に失敗しました。'));
+            }
+            showApiPageFeedback('lend-input-feedback', error, '備品情報の取得に失敗しました。');
         }
     },
 
@@ -711,6 +769,7 @@ window.LendReturnController = {
         isSubmittingLend = true;
 
         try {
+            hidePageFeedback('lend-confirm-feedback');
             const payload = {
                 management_number: lendState.data.itemId,
                 quantity: Number(lendState.data.qty),
@@ -724,11 +783,31 @@ window.LendReturnController = {
             await API.lending.register(payload);
 
             lendState.data = {};
-            alert('貸出登録が完了しました');
-            Router.to('lend-input');
+            if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
+                CommonController.showComplete({
+                    message: '貸出登録が完了しました',
+                    autoRedirectSeconds: 0,
+                    actions: [
+                        {
+                            label: '続けて貸出登録',
+                            routeKey: 'lend-input',
+                            style: 'primary-btn',
+                            clearHistory: true
+                        },
+                        {
+                            label: '貸出メニューへ戻る',
+                            routeKey: 'lend-menu',
+                            style: 'back-btn',
+                            clearHistory: true
+                        }
+                    ]
+                });
+            } else {
+                Router.to('lend-input');
+            }
         } catch (error) {
             console.error('submitLend error:', error);
-            showApiError(error, '貸出登録に失敗しました');
+            showApiPageFeedback('lend-confirm-feedback', error, '貸出登録に失敗しました。');
         } finally {
             isSubmittingLend = false;
         }
@@ -736,7 +815,7 @@ window.LendReturnController = {
 
     async triggerQuickReturn(lendKey) {
         if (!lendKey) {
-            alert('貸出番号が取得できません');
+            setHistoryStatus('lend', '貸出番号が取得できません。', 'error');
             return;
         }
 
@@ -748,16 +827,23 @@ window.LendReturnController = {
             Router.to('return-input');
         } catch (error) {
             console.error('triggerQuickReturn error:', error);
-            showApiError(error, '返却対象の取得に失敗しました');
+            setHistoryStatus('lend', getApiErrorMessage(error, '返却対象の取得に失敗しました。'), 'error');
         }
     },
 
     async searchLending() {
         const input = document.getElementById('return-search-query');
         const query = input ? input.value.trim() : '';
+        hidePageFeedback('return-search-feedback');
+        if (input) {
+            clearFieldFeedback(input);
+        }
 
         if (!query) {
-            alert('備品番号または貸出先を入力してください');
+            if (input) {
+                setFieldFeedback(input, '備品番号または貸出先を入力してください。');
+            }
+            showPageFeedback('return-search-feedback', '備品番号または貸出先を入力してください。', 'error');
             return;
         }
 
@@ -777,7 +863,7 @@ window.LendReturnController = {
             }
 
             if (list.length === 0) {
-                alert('該当する貸出情報が見つかりません');
+                showPageFeedback('return-search-feedback', '該当する貸出情報が見つかりません。', 'warning');
                 return;
             }
 
@@ -794,14 +880,14 @@ window.LendReturnController = {
             Router.to('return-select');
         } catch (error) {
             console.error('searchLending error:', error);
-            showApiError(error, '貸出検索に失敗しました');
+            showApiPageFeedback('return-search-feedback', error, '貸出検索に失敗しました。');
         }
     },
 
     async selectReturnTarget(index) {
         const target = returnState.searchResults[index];
         if (!target) {
-            alert('返却候補が見つかりません');
+            showPageFeedback('return-select-feedback', '返却候補が見つかりません。再検索してください。', 'error');
             return;
         }
 
@@ -818,7 +904,14 @@ window.LendReturnController = {
 
     saveReturnInput() {
         const form = document.getElementById('form-return');
-        if (!form || !form.reportValidity()) {
+        if (!form) {
+            return;
+        }
+
+        hidePageFeedback('return-input-feedback');
+        clearFeedbackInContainer(form);
+        if (!form.reportValidity()) {
+            showPageFeedback('return-input-feedback', '入力内容を確認してください。', 'error');
             return;
         }
 
@@ -837,19 +930,20 @@ window.LendReturnController = {
         }
 
         if (!returnState.targetLending) {
-            alert('返却対象がありません');
+            showPageFeedback('return-confirm-feedback', '返却対象がありません。', 'error');
             return;
         }
 
         const lendKey = getLendKey(returnState.targetLending);
         if (!lendKey) {
-            alert('貸出番号が取得できません');
+            showPageFeedback('return-confirm-feedback', '貸出番号が取得できません。', 'error');
             return;
         }
 
         isSubmittingReturn = true;
 
         try {
+            hidePageFeedback('return-confirm-feedback');
             const payload = {
                 quantity: Number(returnState.inputData.returnQty || getLendQuantity(returnState.targetLending) || 1),
                 processed_by_id: returnState.inputData.returner,
@@ -864,11 +958,31 @@ window.LendReturnController = {
             returnState.searchResults = [];
             returnState.inputData = {};
 
-            alert('返却処理が完了しました');
-            Router.to('return-search');
+            if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
+                CommonController.showComplete({
+                    message: '返却処理が完了しました',
+                    autoRedirectSeconds: 0,
+                    actions: [
+                        {
+                            label: '続けて返却登録',
+                            routeKey: 'return-search',
+                            style: 'primary-btn',
+                            clearHistory: true
+                        },
+                        {
+                            label: '返却メニューへ戻る',
+                            routeKey: 'return-menu',
+                            style: 'back-btn',
+                            clearHistory: true
+                        }
+                    ]
+                });
+            } else {
+                Router.to('return-search');
+            }
         } catch (error) {
             console.error('submitReturn error:', error);
-            showApiError(error, '返却処理に失敗しました');
+            showApiPageFeedback('return-confirm-feedback', error, '返却処理に失敗しました。');
         } finally {
             isSubmittingReturn = false;
         }
@@ -999,6 +1113,7 @@ window.LendReturnController = {
 
 export function initLendReturn(view) {
     if (view === 'lend-confirm') {
+        hidePageFeedback('lend-confirm-feedback');
         const display = document.getElementById('lend-confirm-view');
         if (display) {
             display.innerHTML = `
@@ -1011,13 +1126,36 @@ export function initLendReturn(view) {
                 <div class="info-row"><span class="info-label">実行者</span><span>${escapeHtml(lendState.data.lender || '')}</span></div>
             `;
         }
+    } else if (view === 'return-search') {
+        hidePageFeedback('return-search-feedback');
     } else if (view === 'return-select') {
+        hidePageFeedback('return-select-feedback');
         renderReturnSelection();
+    } else if (view === 'lend-input') {
+        hidePageFeedback('lend-input-feedback');
+        const form = document.getElementById('form-lend');
+        if (form) {
+            restoreNamedFormValues(form, lendState.data);
+        }
+        mountDeviceStatusPanel('lend-device-status', {
+            title: '利用機器',
+            devices: ['nfc']
+        });
+        mountAssetPreview('input[name="itemId"]', 'lend-asset-preview', {
+            emptyMessage: '備品番号を入力すると、貸出前に対象備品を確認できます。'
+        });
     } else if (view === 'return-input') {
+        hidePageFeedback('return-input-feedback');
+        mountDeviceStatusPanel('return-device-status', {
+            title: '利用機器',
+            devices: ['nfc']
+        });
+        const form = document.getElementById('form-return');
         const target = returnState.targetLending;
         if (!target) {
-            alert('不正な遷移です');
-            Router.to('return-search');
+            Router.to('return-search').then(() => {
+                showPageFeedback('return-search-feedback', '返却対象が見つかりません。対象を再検索してください。', 'warning');
+            });
             return;
         }
 
@@ -1048,9 +1186,14 @@ export function initLendReturn(view) {
             borrowerInput.value = target.borrower_id || target.borrower || '';
         }
         if (dateInput) {
-            dateInput.value = toDateInputValue(new Date());
+            dateInput.value = returnState.inputData.returnDate || toDateInputValue(new Date());
+        }
+        const returnerInput = form.querySelector('input[name="returner"]');
+        if (returnerInput) {
+            returnerInput.value = returnState.inputData.returner || '';
         }
     } else if (view === 'return-confirm') {
+        hidePageFeedback('return-confirm-feedback');
         const display = document.getElementById('return-confirm-view');
         const target = returnState.targetLending;
         const input = returnState.inputData;

@@ -1,5 +1,9 @@
 <div class="screen-content">
     <h2>備品参照・編集</h2>
+    <div class="screen-tools-stack">
+        <div id="item-list-feedback" class="batch-status-banner info page-feedback" hidden></div>
+        <div id="item-list-device-status"></div>
+    </div>
 
     <div class="filters-container">
         <label>絞り込み:</label>
@@ -40,7 +44,7 @@
     </table>
 
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.to('main-menu')">戻る</button>
+        <button class="back-btn" onclick="Router.back('main-menu')">戻る</button>
     </div>
 </div>
 
@@ -51,6 +55,7 @@
         <form id="form-item-edit" onsubmit="event.preventDefault(); ItemListController.update();">
             <input type="hidden" id="edit-asset-id">
             <input type="hidden" id="edit-status-original">
+            <div id="item-list-edit-feedback" class="batch-status-banner info page-feedback" hidden></div>
 
             <div class="info-block">
                 <h4>マスタ情報 (変更不可)</h4>
@@ -114,6 +119,8 @@
 
     <form id="form-label-print" onsubmit="event.preventDefault(); ItemListController.submitLabelPrint();">
       <input type="hidden" id="label-mgmt-number">
+      <div id="item-list-label-feedback" class="batch-status-banner info page-feedback" hidden></div>
+      <div id="item-list-label-device-status"></div>
 
       <div class="info-block">
         <h4>印刷対象</h4>

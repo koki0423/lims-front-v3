@@ -1,5 +1,9 @@
 <div class="screen-content">
     <h2>返却登録</h2>
+    <div class="screen-tools-stack">
+        <div id="return-input-feedback" class="batch-status-banner info page-feedback" hidden></div>
+        <div id="return-device-status"></div>
+    </div>
     <form id="form-return">
         <div class="form-group">
             <label>貸出番号 (編集不可)</label>
@@ -39,7 +43,7 @@
         </div>
     </form>
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.to('return-search')">戻る</button>
+        <button class="back-btn" onclick="Router.back('return-search')">戻る</button>
         <button class="next-btn" onclick="LendReturnController.saveReturnInput()">次へ</button>
     </div>
 </div>

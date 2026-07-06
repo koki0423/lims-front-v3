@@ -2,6 +2,8 @@ import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
 import { escapeHtml, toLocalDateTimeIso } from '../../js/dom_utils.js';
+import { mountDeviceStatusPanel } from '../../js/device_status.js';
+import { hidePageFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
 
 // =====================================
 // 定数・ヘルパ
@@ -374,9 +376,9 @@ function summarizeBatchCommitResults(results) {
     return summary;
 }
 
-function notifyBatchCommitFailures(summary) {
+function buildBatchCommitFailureNote(summary) {
     if (!summary || summary.failureCount === 0) {
-        return;
+        return '';
     }
 
     const headline = summary.successCount > 0
@@ -388,7 +390,7 @@ function notifyBatchCommitFailures(summary) {
     const remainingCount = Math.max(0, summary.failureCount - summary.failureMessages.length);
     const tail = remainingCount > 0 ? `\n...他 ${remainingCount}件` : '';
 
-    alert(headline + detailText + tail);
+    return headline + detailText + tail;
 }
 
 function buildBatchCommitCompletionMessage(summary) {
@@ -407,11 +409,31 @@ function buildBatchCommitCompletionMessage(summary) {
     return `一括登録は失敗しました（失敗${summary.failureCount}件）`;
 }
 
-function showBatchCommitCompletion(summary) {
+function showBatchCommitCompletion(summary, options = {}) {
     const message = buildBatchCommitCompletionMessage(summary);
+    const note = options.note || '';
+    const continueRouteKey = options.continueRouteKey || 'reg-batch-select';
 
     if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-        CommonController.showComplete(message);
+        CommonController.showComplete({
+            message,
+            note,
+            autoRedirectSeconds: 0,
+            actions: [
+                {
+                    label: '続けて登録',
+                    routeKey: continueRouteKey,
+                    style: 'primary-btn',
+                    clearHistory: true
+                },
+                {
+                    label: 'メニューへ戻る',
+                    routeKey: 'main-menu',
+                    style: 'back-btn',
+                    clearHistory: true
+                }
+            ]
+        });
     } else {
         Router.to('complete');
     }
@@ -1183,21 +1205,21 @@ function buildPayloadsFromState() {
     const d = regState.data;
 
     // 必須チェック
-    if (!d.itemName) { alert('備品名は必須です。'); return null; }
-    if (!d.maker) { alert('メーカー名は必須です。'); return null; }
-    if (!d.model) { alert('型番は必須です。（不明な場合は「不明」と入力）'); return null; }
-    if (regState.type === 'individual' && !d.serial) { alert('シリアル番号は必須です。'); return null; }
-    if (!d.genre) { alert('備品ジャンルは必須です。'); return null; }
-    if (!d.location) { alert('標準保管場所 または 所有者は必須です。'); return null; }
-    if (!d.purchaseDate) { alert('購入日は必須です。'); return null; }
-    if (!d.registrant) { alert('登録者は必須です。'); return null; }
+    if (!d.itemName) { showPageFeedback('registration-confirm-feedback', '備品名は必須です。', 'error'); return null; }
+    if (!d.maker) { showPageFeedback('registration-confirm-feedback', 'メーカー名は必須です。', 'error'); return null; }
+    if (!d.model) { showPageFeedback('registration-confirm-feedback', '型番は必須です。（不明な場合は「不明」と入力）', 'error'); return null; }
+    if (regState.type === 'individual' && !d.serial) { showPageFeedback('registration-confirm-feedback', 'シリアル番号は必須です。', 'error'); return null; }
+    if (!d.genre) { showPageFeedback('registration-confirm-feedback', '備品ジャンルは必須です。', 'error'); return null; }
+    if (!d.location) { showPageFeedback('registration-confirm-feedback', '標準保管場所 または 所有者は必須です。', 'error'); return null; }
+    if (!d.purchaseDate) { showPageFeedback('registration-confirm-feedback', '購入日は必須です。', 'error'); return null; }
+    if (!d.registrant) { showPageFeedback('registration-confirm-feedback', '登録者は必須です。', 'error'); return null; }
 
     const genre = genreByName(d.genre);
-    if (!genre) { alert('備品ジャンルの値が不正です。'); return null; }
+    if (!genre) { showPageFeedback('registration-confirm-feedback', '備品ジャンルの値が不正です。', 'error'); return null; }
 
     // 区分: 個別 =1, 一括 =2
     let managementCategoryId = (regState.type === 'individual') ? 1 : (regState.type === 'bulk') ? 2 : null;
-    if (!managementCategoryId) { alert('管理方法が選択されていません。'); return null; }
+    if (!managementCategoryId) { showPageFeedback('registration-confirm-feedback', '管理方法が選択されていません。', 'error'); return null; }
 
     return {
         master: {
@@ -1902,7 +1924,8 @@ window.RegController = {
         const startRaw = (document.getElementById('simple-serial-start')?.value || '').trim();
 
         if (!/^\d+$/.test(startRaw)) {
-            alert('開始番号には数字を入力してください');
+            setSimpleBatchStatus('開始番号には数字を入力してください。', 'error');
+            renderSimpleBatchView();
             return;
         }
 
@@ -1927,7 +1950,6 @@ window.RegController = {
         } catch (error) {
             setSimpleBatchStatus('入力内容を確認してください。', 'error');
             renderSimpleBatchView();
-            alert(error.message || '入力内容を確認してください');
             return;
         }
 
@@ -1960,17 +1982,20 @@ window.RegController = {
         }
 
         if (!simpleBatchState.validation) {
-            alert('先にプレビューを作成してください');
+            setSimpleBatchStatus('先にプレビューを作成してください。', 'error');
+            renderSimpleBatchView();
             return;
         }
 
         if (simpleBatchState.validation.hasErrors) {
-            alert('エラーがあるため登録できません。入力内容を修正してから再度プレビューしてください。');
+            setSimpleBatchStatus('エラーがあるため登録できません。入力内容を修正してから再度プレビューしてください。', 'error');
+            renderSimpleBatchView();
             return;
         }
 
         if (!simpleBatchState.importFile) {
-            alert('登録対象データがありません');
+            setSimpleBatchStatus('登録対象データがありません。', 'error');
+            renderSimpleBatchView();
             return;
         }
 
@@ -1993,31 +2018,31 @@ window.RegController = {
                 error.message;
 
             simpleBatchState.committing = false;
-            setSimpleBatchStatus('登録に失敗しました。内容を確認して再度実行してください。', 'error');
+            setSimpleBatchStatus(`一括登録に失敗しました: ${msg}`, 'error');
             renderSimpleBatchView();
-            alert('一括登録に失敗しました: ' + msg);
             return;
         }
 
         simpleBatchState.results = Array.isArray(response?.results) ? response.results : [];
         const commitSummary = summarizeBatchCommitResults(simpleBatchState.results);
-        notifyBatchCommitFailures(commitSummary);
-
-        try {
-            if (simpleBatchState.results.length === 0 || commitSummary.successCount > 0) {
-                await this.printImportedLabels(simpleBatchState.printConfig, simpleBatchState.results);
-            }
-        } catch (error) {
-            console.error('Post-commit print preparation error:', error);
-            alert(
-                '登録は完了しましたが、印刷準備でエラーが発生しました。\n'
-                + (error.message || '一覧画面から手動で印刷してください。')
-            );
-        } finally {
-            clearSimpleBatchState();
+        const completionNotes = [];
+        const failureNote = buildBatchCommitFailureNote(commitSummary);
+        if (failureNote) {
+            completionNotes.push(failureNote);
         }
 
-        showBatchCommitCompletion(commitSummary);
+        if (simpleBatchState.results.length === 0 || commitSummary.successCount > 0) {
+            const printOutcome = await this.printImportedLabels(simpleBatchState.printConfig, simpleBatchState.results);
+            if (printOutcome?.note) {
+                completionNotes.push(printOutcome.note);
+            }
+        }
+
+        clearSimpleBatchState();
+        showBatchCommitCompletion(commitSummary, {
+            continueRouteKey: 'reg-batch-simple',
+            note: completionNotes.join('\n\n')
+        });
     },
 
     updateTableBatchField(rowId, field, value) {
@@ -2076,7 +2101,6 @@ window.RegController = {
         } catch (error) {
             setTableBatchStatus('入力内容を確認してください。', 'error');
             renderTableBatchView();
-            alert(error.message || '入力内容を確認してください');
             return;
         }
 
@@ -2109,17 +2133,20 @@ window.RegController = {
         }
 
         if (!tableBatchState.validation) {
-            alert('先にプレビューを作成してください');
+            setTableBatchStatus('先にプレビューを作成してください。', 'error');
+            renderTableBatchView();
             return;
         }
 
         if (tableBatchState.validation.hasErrors) {
-            alert('エラーがあるため登録できません。入力内容を修正してから再度プレビューしてください。');
+            setTableBatchStatus('エラーがあるため登録できません。入力内容を修正してから再度プレビューしてください。', 'error');
+            renderTableBatchView();
             return;
         }
 
         if (!tableBatchState.importFile) {
-            alert('登録対象データがありません');
+            setTableBatchStatus('登録対象データがありません。', 'error');
+            renderTableBatchView();
             return;
         }
 
@@ -2142,31 +2169,31 @@ window.RegController = {
                 error.message;
 
             tableBatchState.committing = false;
-            setTableBatchStatus('登録に失敗しました。内容を確認して再度実行してください。', 'error');
+            setTableBatchStatus(`一括登録に失敗しました: ${msg}`, 'error');
             renderTableBatchView();
-            alert('一括登録に失敗しました: ' + msg);
             return;
         }
 
         tableBatchState.results = Array.isArray(response?.results) ? response.results : [];
         const commitSummary = summarizeBatchCommitResults(tableBatchState.results);
-        notifyBatchCommitFailures(commitSummary);
-
-        try {
-            if (tableBatchState.results.length === 0 || commitSummary.successCount > 0) {
-                await this.printImportedLabels(tableBatchState.printConfig, tableBatchState.results);
-            }
-        } catch (error) {
-            console.error('Post-commit print preparation error:', error);
-            alert(
-                '登録は完了しましたが、印刷準備でエラーが発生しました。\n'
-                + (error.message || '一覧画面から手動で印刷してください。')
-            );
-        } finally {
-            clearTableBatchState();
+        const completionNotes = [];
+        const failureNote = buildBatchCommitFailureNote(commitSummary);
+        if (failureNote) {
+            completionNotes.push(failureNote);
         }
 
-        showBatchCommitCompletion(commitSummary);
+        if (tableBatchState.results.length === 0 || commitSummary.successCount > 0) {
+            const printOutcome = await this.printImportedLabels(tableBatchState.printConfig, tableBatchState.results);
+            if (printOutcome?.note) {
+                completionNotes.push(printOutcome.note);
+            }
+        }
+
+        clearTableBatchState();
+        showBatchCommitCompletion(commitSummary, {
+            continueRouteKey: 'reg-batch-table',
+            note: completionNotes.join('\n\n')
+        });
     },
 
     // P4 -> P5: 入力画面1保存
@@ -2174,10 +2201,14 @@ window.RegController = {
         const form = document.getElementById('form-reg-1');
         if (!form) return;
 
+        hidePageFeedback('registration-step1-feedback');
         if (!isManualInputOpen()) {
             setManualInputOpen(true);
         }
-        if (!form.reportValidity()) return;
+        if (!form.reportValidity()) {
+            showPageFeedback('registration-step1-feedback', '入力内容を確認してください。', 'error');
+            return;
+        }
 
         const formData = new FormData(form);
         for (const [key, val] of formData.entries()) {
@@ -2189,7 +2220,11 @@ window.RegController = {
     // P5 -> P6: 入力画面2保存
     saveStep2() {
         const form = document.getElementById('form-reg-2');
-        if (!form || !form.reportValidity()) return;
+        hidePageFeedback('registration-step2-feedback');
+        if (!form || !form.reportValidity()) {
+            showPageFeedback('registration-step2-feedback', '入力内容を確認してください。', 'error');
+            return;
+        }
 
         const formData = new FormData(form);
         for (const [key, val] of formData.entries()) {
@@ -2218,12 +2253,14 @@ window.RegController = {
 
             input.value = result.studentId;
             input.setCustomValidity('');
+            hidePageFeedback('registration-step2-feedback');
         } catch (err) {
             console.error('scan error:', err);
             input.value = '';
             input.setCustomValidity(err instanceof Error ? err.message : 'NFCの読み取りに失敗しました。');
             input.reportValidity();
             input.focus();
+            showPageFeedback('registration-step2-feedback', err instanceof Error ? err.message : 'NFCの読み取りに失敗しました。', 'error');
         }
     },
 
@@ -2233,29 +2270,43 @@ window.RegController = {
         regState.submitting = true;
 
         try {
+            hidePageFeedback('registration-confirm-feedback');
             const payloads = buildPayloadsFromState();
             if (!payloads) return;
 
             const result = await executeRegistration(payloads);
-
-            if (result.printFailed) {
-                alert(`登録完了しましたが印刷に失敗しました。\n管理番号: ${result.managementNumber}`);
-            } else {
-                alert(`登録完了、印刷を開始しました。\n管理番号: ${result.managementNumber}`);
-            }
+            const completeMessage = result.printFailed
+                ? `新規登録は完了しました。ラベル印刷は実行できませんでした。管理番号: ${result.managementNumber}`
+                : `新規登録とラベル印刷を開始しました。管理番号: ${result.managementNumber}`;
 
             regState.data = {};
             regState.type = '';
 
             if (typeof CommonController !== 'undefined' && CommonController.showComplete) {
-                CommonController.showComplete('新規登録が完了しました');
+                CommonController.showComplete({
+                    message: completeMessage,
+                    autoRedirectSeconds: 0,
+                    actions: [
+                        {
+                            label: '続けて登録',
+                            routeKey: 'reg-select',
+                            style: 'primary-btn',
+                            clearHistory: true
+                        },
+                        {
+                            label: 'メニューへ戻る',
+                            routeKey: 'main-menu',
+                            style: 'back-btn',
+                            clearHistory: true
+                        }
+                    ]
+                });
             } else {
                 Router.to('complete');
             }
         } catch (e) {
             console.error('登録エラー:', e);
-            const msg = e.response?.data?.error || e.message || '登録に失敗しました';
-            alert(`登録に失敗しました。\n${msg}`);
+            showApiPageFeedback('registration-confirm-feedback', e, '登録に失敗しました。');
         } finally {
             regState.submitting = false;
         }
@@ -2290,7 +2341,8 @@ window.RegController = {
         const fileInput = document.getElementById('file-csv');
 
         if (!fileInput || fileInput.files.length === 0) {
-            alert('ファイルを選択してください');
+            setBatchStatus('ファイルを選択してください。', 'error');
+            renderBatchImportView();
             return;
         }
 
@@ -2316,9 +2368,8 @@ window.RegController = {
         } catch (error) {
             console.error('CSV変換エラー:', error);
             clearBatchPreviewState();
-            setBatchStatus('CSVの解析に失敗しました。テンプレート内容を確認してください。', 'error');
+            setBatchStatus(`CSVの変換に失敗しました: ${error.message || 'テンプレート内容を確認してください'}`, 'error');
             renderBatchImportView();
-            alert('CSVの変換に失敗しました: ' + (error.message || 'テンプレート内容を確認してください'));
         }
     },
 
@@ -2339,17 +2390,20 @@ window.RegController = {
         }
 
         if (!batchImportState.validation) {
-            alert('先にプレビューを作成してください');
+            setBatchStatus('先にプレビューを作成してください。', 'error');
+            renderBatchImportView();
             return;
         }
 
         if (batchImportState.validation.hasErrors) {
-            alert('エラーがあるため登録できません。CSV を修正してから再度プレビューしてください。');
+            setBatchStatus('エラーがあるため登録できません。CSV を修正してから再度プレビューしてください。', 'error');
+            renderBatchImportView();
             return;
         }
 
         if (!batchImportState.importFile) {
-            alert('登録対象データがありません');
+            setBatchStatus('登録対象データがありません。', 'error');
+            renderBatchImportView();
             return;
         }
 
@@ -2372,9 +2426,8 @@ window.RegController = {
                 error.message;
 
             batchImportState.committing = false;
-            setBatchStatus('登録に失敗しました。内容を確認して再度実行してください。', 'error');
+            setBatchStatus(`一括登録に失敗しました: ${msg}`, 'error');
             renderBatchImportView();
-            alert('一括登録に失敗しました: ' + msg);
             return;
         }
 
@@ -2382,42 +2435,48 @@ window.RegController = {
 
         batchImportState.results = Array.isArray(response?.results) ? response.results : [];
         const commitSummary = summarizeBatchCommitResults(batchImportState.results);
-        notifyBatchCommitFailures(commitSummary);
-
-        try {
-            if (batchImportState.results.length === 0 || commitSummary.successCount > 0) {
-                await this.printImportedLabels(batchImportState.printConfig, batchImportState.results);
-            }
-        } catch (error) {
-            console.error('Post-commit print preparation error:', error);
-            alert(
-                '登録は完了しましたが、印刷準備でエラーが発生しました。\n'
-                + (error.message || '一覧画面から手動で印刷してください。')
-            );
-        } finally {
-            clearBatchImportState();
+        const completionNotes = [];
+        const failureNote = buildBatchCommitFailureNote(commitSummary);
+        if (failureNote) {
+            completionNotes.push(failureNote);
         }
 
-        showBatchCommitCompletion(commitSummary);
+        if (batchImportState.results.length === 0 || commitSummary.successCount > 0) {
+            const printOutcome = await this.printImportedLabels(batchImportState.printConfig, batchImportState.results);
+            if (printOutcome?.note) {
+                completionNotes.push(printOutcome.note);
+            }
+        }
+
+        clearBatchImportState();
+        showBatchCommitCompletion(commitSummary, {
+            continueRouteKey: 'reg-batch',
+            note: completionNotes.join('\n\n')
+        });
     },
 
     // 一括登録後のラベル印刷処理
     async printImportedLabels(config = batchImportState.printConfig, results = batchImportState.results) {
         if (!config || !Array.isArray(results)) {
-            return;
+            return { note: '' };
         }
 
         const labels = buildBatchLabels(results);
 
         if (labels.length === 0) {
-            alert('登録は完了しましたが、印刷可能なデータがありませんでした');
-            return;
+            return {
+                tone: 'warning',
+                note: '登録は完了しましたが、印刷可能なデータがありませんでした。'
+            };
         }
 
         // ここで確認ダイアログ
         if (!confirm(`${labels.length} 件の登録に成功しました。\n続けてラベルを印刷しますか？`)) {
             // キャンセルされたら印刷せず終了（呼び出し元に戻って完了画面へ）
-            return;
+            return {
+                tone: 'info',
+                note: '登録は完了しました。ラベル印刷は実行していません。'
+            };
         }
 
         const type = config.type.toLowerCase() === 'code128' ? 'code128' : 'qrcode';
@@ -2431,14 +2490,18 @@ window.RegController = {
             );
 
             console.log('Batch print started:', printJob);
-            alert('印刷を開始しました');
+            return {
+                tone: 'success',
+                note: `${labels.length}件のラベル印刷を開始しました。`
+            };
         } catch (error) {
             console.error('Print error:', error);
-            alert(
-                '印刷に失敗しました: '
-                + (error.response?.data?.error || error.message)
-                + '\n一覧画面から手動で印刷してください。'
-            );
+            return {
+                tone: 'warning',
+                note: '登録は完了しましたが、ラベル印刷に失敗しました。\n'
+                    + ((error.response?.data?.error || error.message) || '一覧画面から手動で印刷してください。')
+                    + '\n一覧画面から手動で印刷してください。'
+            };
         }
     },
 
@@ -2456,13 +2519,14 @@ window.RegController = {
         const modelInput = document.querySelector('input[name="model"]');
 
         if (!janInput) return;
+        hidePageFeedback('registration-step1-feedback');
         const janCode = janInput.value.trim();
         if (!janCode) {
-            alert('JANコードを入力してください');
+            showPageFeedback('registration-step1-feedback', 'JANコードを入力してください。', 'error');
             return;
         }
         if (!/^\d+$/.test(janCode)) {
-            alert('JAN/ISBNは数字のみ入力してください');
+            showPageFeedback('registration-step1-feedback', 'JAN/ISBNは数字のみ入力してください。', 'error');
             janInput.focus();
             return;
         }
@@ -2476,6 +2540,7 @@ window.RegController = {
             // 取得した値をセット
             if (result.name) nameInput.value = result.name;
             if (result.manufacturer) makerInput.value = result.manufacturer;
+            hidePageFeedback('registration-step1-feedback');
 
             // ★検索成功したら、隠れていたフォームを自動で開く
             this.toggleManualInput(true);
@@ -2485,7 +2550,7 @@ window.RegController = {
         } catch (error) {
             console.error('JAN Lookup Error:', error);
             const msg = error.response?.data?.error || error.response?.data?.message || '商品情報が見つかりませんでした。';
-            alert(`検索エラー: ${msg}`);
+            showPageFeedback('registration-step1-feedback', `検索エラー: ${msg}`, 'warning');
 
             // ★見つからなかった場合も手入力してもらうために開く
             this.toggleManualInput(true);
@@ -2543,6 +2608,7 @@ export async function initRegistration(step) {
         await initTableBatchRegistration();
     } else if (step === 'step1') {
         await AppState.ensureMasterData();
+        hidePageFeedback('registration-step1-feedback');
         renderGenreOptions();
         const form = document.getElementById('form-reg-1');
         if (form && regState.data) restoreFormData(form, regState.data);
@@ -2596,10 +2662,20 @@ export async function initRegistration(step) {
         const form = document.getElementById('form-reg-1');
         if (form) restoreFormData(form, regState.data);
     } else if (step === 'step3') {
+        hidePageFeedback('registration-step2-feedback');
+        mountDeviceStatusPanel('registration-step2-device-status', {
+            title: '利用機器',
+            devices: ['nfc']
+        });
         const form = document.getElementById('form-reg-2');
         if (form) restoreFormData(form, regState.data);
         ensureRegistrantInputValidation();
     } else if (step === 'confirm') {
+        hidePageFeedback('registration-confirm-feedback');
+        mountDeviceStatusPanel('registration-confirm-device-status', {
+            title: '印刷機器',
+            devices: ['tepra']
+        });
         renderConfirm();
     }
 }

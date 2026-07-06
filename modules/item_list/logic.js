@@ -2,6 +2,8 @@ import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
 import { escapeHtml } from '../../js/dom_utils.js';
 import { normalizePageResponse } from '../../js/pagination_utils.js';
+import { mountDeviceStatusPanel } from '../../js/device_status.js';
+import { hidePageFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
 
 // === 状態管理 ===
 const itemListState = {
@@ -127,6 +129,7 @@ async function loadItemPage(page = 1) {
     const tbody = document.getElementById('item-list-body');
     const loader = document.getElementById('loading-spinner');
     const safePage = Math.max(1, Number(page) || 1);
+    hidePageFeedback('item-list-feedback');
     const params = {
         limit: itemListState.itemsPerPage,
         offset: (safePage - 1) * itemListState.itemsPerPage
@@ -172,6 +175,7 @@ async function loadItemPage(page = 1) {
         itemListState.items = [];
         itemListState.totalItems = 0;
         itemListState.totalPages = 1;
+        showPageFeedback('item-list-feedback', '備品一覧の取得に失敗しました。', 'error');
 
         if (tbody) {
             tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state table-empty-state-error">データの取得に失敗しました</td></tr>';
@@ -332,7 +336,7 @@ window.ItemListController = {
     editByIndex(index) {
         const item = itemListState.items[index];
         if (!item) {
-            alert('対象データが見つかりません');
+            showPageFeedback('item-list-feedback', '対象データが見つかりません。', 'error');
             return;
         }
 
@@ -342,6 +346,7 @@ window.ItemListController = {
     // 詳細・編集モーダルを開く
     async edit(managementNumber) {
         try {
+            hidePageFeedback('item-list-feedback');
             const data = await API.assets.getPair(managementNumber);
             const asset = data.asset;
             const master = data.master;
@@ -401,7 +406,7 @@ window.ItemListController = {
             }
         } catch (error) {
             console.error(error);
-            alert('データの取得に失敗しました');
+            showApiPageFeedback('item-list-feedback', error, 'データの取得に失敗しました。');
         }
     },
 
@@ -413,6 +418,7 @@ window.ItemListController = {
     },
 
     async update() {
+        hidePageFeedback('item-list-edit-feedback');
         const id = document.getElementById('edit-asset-id').value;
         const statusSelect = document.getElementById('edit-status');
         const statusOriginalVal = document.getElementById('edit-status-original').value;
@@ -439,19 +445,24 @@ window.ItemListController = {
 
         try {
             await API.assets.update(id, payload);
-            alert('更新しました');
             this.closeModal();
+            showPageFeedback('item-list-feedback', '更新しました。', 'success');
             resetItemFilterCache();
             await loadItemPage(itemListState.currentPage);
         } catch (error) {
             console.error(error);
-            alert('更新に失敗しました: ' + (error.response?.data?.error || error.message));
+            showApiPageFeedback('item-list-edit-feedback', error, '更新に失敗しました。');
         }
     },
 
     openLabelModal(managementNumber) {
         const modal = document.getElementById('label-modal');
         if (!modal) return;
+        hidePageFeedback('item-list-label-feedback');
+        mountDeviceStatusPanel('item-list-label-device-status', {
+            title: '印刷機器',
+            devices: ['tepra']
+        });
 
         const mgmtHidden = document.getElementById('label-mgmt-number');
         const mgmtDisp = document.getElementById('label-target-display');
@@ -470,7 +481,7 @@ window.ItemListController = {
     openLabelModalByIndex(index) {
         const item = itemListState.items[index];
         if (!item) {
-            alert('対象データが見つかりません');
+            showPageFeedback('item-list-feedback', '対象データが見つかりません。', 'error');
             return;
         }
 
@@ -490,7 +501,7 @@ window.ItemListController = {
 
         const managementNumber = mgmtHidden ? mgmtHidden.value : '';
         if (!managementNumber) {
-            alert('管理番号が取得できません');
+            showPageFeedback('item-list-label-feedback', '管理番号が取得できません。', 'error');
             return;
         }
 
@@ -528,11 +539,11 @@ window.ItemListController = {
                 true
             );
 
-            alert('ラベル印刷を実行しました');
             this.closeLabelModal();
+            showPageFeedback('item-list-feedback', 'ラベル印刷を実行しました。', 'success');
         } catch (error) {
             console.error('印刷エラー:', error);
-            alert('印刷に失敗しました: ' + (error.response?.data?.error || error.message));
+            showApiPageFeedback('item-list-label-feedback', error, '印刷に失敗しました。');
         } finally {
             if (btn) {
                 btn.disabled = false;
@@ -585,6 +596,17 @@ export async function initItemList() {
     itemListState.currentPage = 1;
     resetItemFilterCache();
     updateFilterButtonStyles();
+    hidePageFeedback('item-list-feedback');
+    hidePageFeedback('item-list-edit-feedback');
+    hidePageFeedback('item-list-label-feedback');
+    mountDeviceStatusPanel('item-list-device-status', {
+        title: '印刷機器',
+        devices: ['tepra']
+    });
+    mountDeviceStatusPanel('item-list-label-device-status', {
+        title: '印刷機器',
+        devices: ['tepra']
+    });
 
     const tbody = document.getElementById('item-list-body');
     if (tbody) {

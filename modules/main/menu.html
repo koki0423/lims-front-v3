@@ -1,21 +1,6 @@
 <div class="screen-content">
     <div class="menu-grid">
-        <div class="device-status-card" aria-label="接続状態">
-            <div class="device-status-title">接続状態</div>
-            <div class="device-status-list">
-                <div class="device-status-item" data-device-status="tepra" data-state="checking">
-                    <span class="device-status-dot" aria-hidden="true"></span>
-                    <span class="device-status-text" data-device-label="tepra">TEPRA 確認中</span>
-                </div>
-                <div class="device-status-item" data-device-status="nfc" data-state="checking">
-                    <span class="device-status-dot" aria-hidden="true"></span>
-                    <span class="device-status-text" data-device-label="nfc">NFCリーダ 確認中</span>
-                    <button type="button" class="device-status-action" onclick="MainMenuController.requestNfcPermission()">
-                        接続確認
-                    </button>
-                </div>
-            </div>
-        </div>
+        <div id="main-device-status"></div>
 
         <button class="menu-btn primary" onclick="Router.to('reg-select')">新規登録</button>
 

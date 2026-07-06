@@ -2,6 +2,8 @@ import { Router } from '../../js/router.js';
 import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
 import { escapeHtml } from '../../js/dom_utils.js';
+import { mountAssetPreview } from '../../js/asset_preview.js';
+import { hidePageFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
 
 // === 定数定義 ===
 // ステータス定義 (ID -> 表示名)
@@ -70,6 +72,7 @@ window.SearchController = {
         searchState.result = null;
         searchState.candidates = [];
         searchState.currentFilter = null;
+        hidePageFeedback('search-feedback');
 
         const idInput = document.querySelector('input[name="itemId"]'); // 備品番号
         const nameInput = document.getElementById('search-name');       // 備品名
@@ -78,7 +81,7 @@ window.SearchController = {
         const nameQuery = nameInput ? nameInput.value.trim() : '';
 
         if (!idQuery && !nameQuery) {
-            alert('検索条件を入力してください');
+            showPageFeedback('search-feedback', '検索条件を入力してください。', 'error');
             return;
         }
 
@@ -98,7 +101,7 @@ window.SearchController = {
             }
 
             if (!results || results.length === 0) {
-                alert('該当する備品は見つかりませんでした');
+                showPageFeedback('search-feedback', '該当する備品は見つかりませんでした。', 'warning');
                 return;
             }
 
@@ -118,7 +121,7 @@ window.SearchController = {
 
         } catch (e) {
             console.error(e);
-            alert('検索中にエラーが発生しました');
+            showApiPageFeedback('search-feedback', e, '検索中にエラーが発生しました。');
         }
     },
     // フィルタ切り替え
@@ -161,7 +164,7 @@ window.SearchController = {
         const rawData = searchState.displayList[index];
 
         if (!rawData) {
-            alert('データの取得に失敗しました');
+            showPageFeedback('search-list-feedback', 'データの取得に失敗しました。再検索してください。', 'error');
             return;
         }
 
@@ -188,12 +191,21 @@ window.SearchController = {
 
 // === 画面初期化 (result.html 表示時) ===
 export function initSearch(view) {
+    if (view === 'input') {
+        hidePageFeedback('search-feedback');
+        mountAssetPreview('input[name="itemId"]', 'search-asset-preview', {
+            emptyMessage: '備品番号を入力すると、検索前に備品情報を確認できます。'
+        });
+        return;
+    }
+
     if (view !== 'result') return;
 
     const data = searchState.result;
     if (!data) {
-        alert('検索結果がありません');
-        // Router.to('search-top'); 
+        Router.to('search-top').then(() => {
+            showPageFeedback('search-feedback', '検索結果がありません。検索条件を確認してください。', 'warning');
+        });
         return;
     }
 
@@ -270,6 +282,7 @@ export function initSearch(view) {
 export function initSearchList() {
     const tbody = document.getElementById('search-candidates-body');
     if (!tbody) return;
+    hidePageFeedback('search-list-feedback');
 
     // ボタンのスタイル初期化
     if (window.SearchController.updateFilterStyles) {
@@ -278,6 +291,7 @@ export function initSearchList() {
 
     if (!searchState.candidates || searchState.candidates.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5">データがありません</td></tr>';
+        showPageFeedback('search-list-feedback', '検索結果がありません。再検索してください。', 'warning');
         return;
     }
 
@@ -322,6 +336,7 @@ export function initSearchList() {
     // ゼロチェック (list を見る)
     if (list.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">該当する条件の備品はありません</td></tr>';
+        showPageFeedback('search-list-feedback', '条件に一致する備品はありません。絞り込み条件を確認してください。', 'warning');
         return;
     }
 
