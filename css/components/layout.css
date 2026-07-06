@@ -59,6 +59,10 @@
     min-width: 600px;
 }
 
+.table-min-900 {
+    min-width: 900px;
+}
+
 .mt-8 {
     margin-top: 8px;
 }

@@ -30,8 +30,10 @@ const returnState = {
 
 let isSubmittingLend = false;
 let isSubmittingReturn = false;
-const lendAssetNameCache = new Map();
-const lendAssetNameRequestCache = new Map();
+const lendAssetDetailsCache = new Map();
+const lendAssetDetailsRequestCache = new Map();
+const lendRecordCache = new Map();
+const lendRecordRequestCache = new Map();
 
 async function loadNfcReader() {
     return import('../../js/nfcReader.js');
@@ -97,6 +99,38 @@ function getLendQuantity(item) {
     return 1;
 }
 
+function normalizeTextValue(value) {
+    if (value === undefined || value === null) {
+        return '';
+    }
+
+    return String(value).trim();
+}
+
+function getLendManagementNumber(item) {
+    return normalizeTextValue(item?.management_number || item?.itemId);
+}
+
+function getLendAssetName(item) {
+    return normalizeTextValue(item?.asset_name || item?.name);
+}
+
+function getLendAssetSerial(item) {
+    return normalizeTextValue(item?.serial || item?.asset_serial || item?.serial_number);
+}
+
+function getLendRecordKey(item) {
+    if (!item) {
+        return '';
+    }
+
+    if (item.lend_id !== undefined && item.lend_id !== null && item.lend_id !== '') {
+        return String(item.lend_id).trim();
+    }
+
+    return getLendKey(item);
+}
+
 function displayHistoryValue(value, fallback = '-') {
     if (value === undefined || value === null) {
         return fallback;
@@ -140,64 +174,147 @@ function getLendHistoryFilterLabel(filter) {
     return 'すべて';
 }
 
-function extractAssetNameFromPairResponse(response) {
-    const name = response?.master?.name || response?.asset?.name || '';
-    return typeof name === 'string' ? name.trim() : '';
+function extractAssetDetailsFromPairResponse(response) {
+    return {
+        asset_name: normalizeTextValue(response?.master?.name || response?.asset?.name),
+        serial: normalizeTextValue(response?.asset?.serial)
+    };
 }
 
-async function fetchLendAssetName(managementNumber) {
+async function fetchLendAssetDetails(managementNumber) {
     const key = String(managementNumber || '').trim();
     if (key === '') {
-        return '';
+        return { asset_name: '', serial: '' };
     }
 
-    if (lendAssetNameCache.has(key)) {
-        return lendAssetNameCache.get(key);
+    if (lendAssetDetailsCache.has(key)) {
+        return lendAssetDetailsCache.get(key);
     }
 
-    if (lendAssetNameRequestCache.has(key)) {
-        return lendAssetNameRequestCache.get(key);
+    if (lendAssetDetailsRequestCache.has(key)) {
+        return lendAssetDetailsRequestCache.get(key);
     }
 
     const request = API.assets.getPair(key)
         .then((response) => {
-            const assetName = extractAssetNameFromPairResponse(response);
-            if (assetName !== '') {
-                lendAssetNameCache.set(key, assetName);
-            }
-            return assetName;
+            const assetDetails = extractAssetDetailsFromPairResponse(response);
+            lendAssetDetailsCache.set(key, assetDetails);
+            return assetDetails;
         })
         .catch((error) => {
-            console.warn('fetchLendAssetName error:', key, error);
-            return '';
+            console.warn('fetchLendAssetDetails error:', key, error);
+            return { asset_name: '', serial: '' };
         })
         .finally(() => {
-            lendAssetNameRequestCache.delete(key);
+            lendAssetDetailsRequestCache.delete(key);
         });
 
-    lendAssetNameRequestCache.set(key, request);
+    lendAssetDetailsRequestCache.set(key, request);
     return request;
 }
 
-async function enrichLendHistoryItemsWithAssetNames(items) {
+async function fetchRequiredLendAssetDetails(managementNumber) {
+    const key = String(managementNumber || '').trim();
+    if (key === '') {
+        throw new Error('備品番号が未入力です');
+    }
+
+    if (lendAssetDetailsCache.has(key)) {
+        return lendAssetDetailsCache.get(key);
+    }
+
+    const response = await API.assets.getPair(key);
+    const assetDetails = extractAssetDetailsFromPairResponse(response);
+    lendAssetDetailsCache.set(key, assetDetails);
+    return assetDetails;
+}
+
+async function fetchLendRecord(lendKey) {
+    const key = String(lendKey || '').trim();
+    if (key === '') {
+        return null;
+    }
+
+    if (lendRecordCache.has(key)) {
+        return lendRecordCache.get(key);
+    }
+
+    if (lendRecordRequestCache.has(key)) {
+        return lendRecordRequestCache.get(key);
+    }
+
+    const request = API.lending.getLend(key)
+        .then((response) => {
+            lendRecordCache.set(key, response);
+            return response;
+        })
+        .catch((error) => {
+            console.warn('fetchLendRecord error:', key, error);
+            return null;
+        })
+        .finally(() => {
+            lendRecordRequestCache.delete(key);
+        });
+
+    lendRecordRequestCache.set(key, request);
+    return request;
+}
+
+function mergeLendItemWithAssetDetails(item, assetDetails = null) {
+    return {
+        ...item,
+        asset_name: getLendAssetName(item) || assetDetails?.asset_name || '',
+        serial: getLendAssetSerial(item) || assetDetails?.serial || ''
+    };
+}
+
+async function enrichLendItemsWithAssetDetails(items) {
     const safeItems = Array.isArray(items) ? items : [];
     const uniqueManagementNumbers = Array.from(
         new Set(
             safeItems
-                .map(item => String(item?.management_number || '').trim())
+                .filter(item => {
+                    const managementNumber = getLendManagementNumber(item);
+                    return managementNumber !== '' && (getLendAssetName(item) === '' || getLendAssetSerial(item) === '');
+                })
+                .map(getLendManagementNumber)
+        )
+    );
+
+    await Promise.all(uniqueManagementNumbers.map(fetchLendAssetDetails));
+
+    return safeItems.map(item => {
+        const managementNumber = getLendManagementNumber(item);
+        const assetDetails = managementNumber === ''
+            ? null
+            : lendAssetDetailsCache.get(managementNumber);
+        return mergeLendItemWithAssetDetails(item, assetDetails);
+    });
+}
+
+async function enrichReturnHistoryItems(items) {
+    const safeItems = Array.isArray(items) ? items : [];
+    const uniqueLendKeys = Array.from(
+        new Set(
+            safeItems
+                .map(getLendRecordKey)
                 .filter(value => value !== '')
         )
     );
 
-    await Promise.all(uniqueManagementNumbers.map(fetchLendAssetName));
+    await Promise.all(uniqueLendKeys.map(fetchLendRecord));
 
     return safeItems.map(item => {
-        const managementNumber = String(item?.management_number || '').trim();
+        const lendRecord = lendRecordCache.get(getLendRecordKey(item));
+        if (!lendRecord) {
+            return item;
+        }
+
         return {
             ...item,
-            asset_name: managementNumber === ''
-                ? ''
-                : (lendAssetNameCache.get(managementNumber) || item?.asset_name || '')
+            management_number: normalizeTextValue(item.management_number) || normalizeTextValue(lendRecord.management_number),
+            borrower_id: normalizeTextValue(item.borrower_id || item.borrower) || normalizeTextValue(lendRecord.borrower_id || lendRecord.borrower),
+            lent_at: item.lent_at || lendRecord.lent_at || null
         };
     });
 }
@@ -411,16 +528,18 @@ function renderReturnSelection() {
     }
 
     if (!returnState.searchResults || returnState.searchResults.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">候補がありません</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="table-empty-state">候補がありません</td></tr>';
         return;
     }
 
     tbody.innerHTML = returnState.searchResults.map((item, index) => `
         <tr>
-            <td>${escapeHtml(item.management_number || '')}</td>
+            <td>${escapeHtml(displayHistoryValue(getLendManagementNumber(item)))}</td>
+            <td>${escapeHtml(displayHistoryValue(item.asset_name, '備品名未取得'))}</td>
+            <td>${escapeHtml(displayHistoryValue(item.serial))}</td>
             <td>${escapeHtml(getLendQuantity(item))}</td>
-            <td>${escapeHtml(item.borrower_id || item.borrower || '')}</td>
-            <td>${escapeHtml(formatDate(item.lent_at || item.created_at || ''))}</td>
+            <td>${escapeHtml(displayHistoryValue(item.borrower_id || item.borrower || ''))}</td>
+            <td>${escapeHtml(displayHistoryValue(formatDate(item.lent_at || item.created_at || ''), '-'))}</td>
             <td class="table-cell-center">
                 <button class="sm-btn" onclick="LendReturnController.selectReturnTarget(${index})">選択</button>
             </td>
@@ -561,7 +680,7 @@ window.LendReturnController = {
         }
     },
 
-    saveLendInput() {
+    async saveLendInput() {
         const form = document.getElementById('form-lend');
         if (!form || !form.reportValidity()) {
             return;
@@ -573,7 +692,15 @@ window.LendReturnController = {
             lendState.data[pair[0]] = pair[1];
         }
 
-        Router.to('lend-confirm');
+        try {
+            const assetDetails = await fetchRequiredLendAssetDetails(lendState.data.itemId);
+            lendState.data.assetName = assetDetails.asset_name;
+            lendState.data.serial = assetDetails.serial;
+            Router.to('lend-confirm');
+        } catch (error) {
+            console.error('saveLendInput asset lookup error:', error);
+            showApiError(error, '備品情報の取得に失敗しました');
+        }
     },
 
     async submitLend() {
@@ -615,7 +742,8 @@ window.LendReturnController = {
 
         try {
             const result = await API.lending.getLend(lendKey);
-            returnState.targetLending = result;
+            const [target] = await enrichLendItemsWithAssetDetails([result]);
+            returnState.targetLending = target;
             returnState.searchResults = [];
             Router.to('return-input');
         } catch (error) {
@@ -654,14 +782,15 @@ window.LendReturnController = {
             }
 
             if (list.length === 1) {
-                returnState.targetLending = list[0];
+                const [target] = await enrichLendItemsWithAssetDetails(list);
+                returnState.targetLending = target;
                 returnState.searchResults = [];
                 Router.to('return-input');
                 return;
             }
 
             returnState.targetLending = null;
-            returnState.searchResults = list;
+            returnState.searchResults = await enrichLendItemsWithAssetDetails(list);
             Router.to('return-select');
         } catch (error) {
             console.error('searchLending error:', error);
@@ -669,14 +798,15 @@ window.LendReturnController = {
         }
     },
 
-    selectReturnTarget(index) {
+    async selectReturnTarget(index) {
         const target = returnState.searchResults[index];
         if (!target) {
             alert('返却候補が見つかりません');
             return;
         }
 
-        returnState.targetLending = target;
+        const [enrichedTarget] = await enrichLendItemsWithAssetDetails([target]);
+        returnState.targetLending = enrichedTarget;
         Router.to('return-input');
     },
 
@@ -807,7 +937,7 @@ window.LendReturnController = {
             const response = await API.lending.fetchLends(params);
 
             assignHistoryPage(lendState.history, response, page);
-            lendState.history.items = await enrichLendHistoryItemsWithAssetNames(lendState.history.items);
+            lendState.history.items = await enrichLendItemsWithAssetDetails(lendState.history.items);
             renderLendHistory();
         } catch (error) {
             console.error('loadLendHistory error:', error);
@@ -848,6 +978,7 @@ window.LendReturnController = {
             });
 
             assignHistoryPage(returnState.history, response, page);
+            returnState.history.items = await enrichReturnHistoryItems(returnState.history.items);
             renderReturnHistory();
         } catch (error) {
             console.error('loadReturnHistory error:', error);
@@ -872,6 +1003,8 @@ export function initLendReturn(view) {
         if (display) {
             display.innerHTML = `
                 <div class="info-row"><span class="info-label">備品番号</span><span>${escapeHtml(lendState.data.itemId || '')}</span></div>
+                <div class="info-row"><span class="info-label">備品名</span><span>${escapeHtml(displayHistoryValue(lendState.data.assetName, '備品名未取得'))}</span></div>
+                <div class="info-row"><span class="info-label">シリアル番号</span><span>${escapeHtml(displayHistoryValue(lendState.data.serial))}</span></div>
                 <div class="info-row"><span class="info-label">数量</span><span>${escapeHtml(lendState.data.qty || '')}</span></div>
                 <div class="info-row"><span class="info-label">貸出先</span><span>${escapeHtml(lendState.data.borrower || '')}</span></div>
                 <div class="info-row"><span class="info-label">返却予定</span><span>${escapeHtml(lendState.data.dueDate || '')}</span></div>
@@ -889,12 +1022,24 @@ export function initLendReturn(view) {
         }
 
         const lendingIdInput = document.getElementById('disp-lending-id');
+        const managementNumberInput = document.getElementById('disp-management-number');
+        const assetNameInput = document.getElementById('disp-asset-name');
+        const serialInput = document.getElementById('disp-serial');
         const qtyInput = document.getElementById('disp-qty');
         const borrowerInput = document.getElementById('disp-borrower');
         const dateInput = document.querySelector('input[name="returnDate"]');
 
         if (lendingIdInput) {
             lendingIdInput.value = getLendKey(target);
+        }
+        if (managementNumberInput) {
+            managementNumberInput.value = displayHistoryValue(getLendManagementNumber(target));
+        }
+        if (assetNameInput) {
+            assetNameInput.value = displayHistoryValue(target.asset_name, '備品名未取得');
+        }
+        if (serialInput) {
+            serialInput.value = displayHistoryValue(target.serial);
         }
         if (qtyInput) {
             qtyInput.value = getLendQuantity(target);
@@ -913,7 +1058,9 @@ export function initLendReturn(view) {
         if (display && target) {
             display.innerHTML = `
                 <div class="info-row"><span class="info-label">貸出番号</span><span class="inline-key">${escapeHtml(getLendKey(target))}</span></div>
-                <div class="info-row"><span class="info-label">備品番号</span><span>${escapeHtml(target.management_number || target.itemId || '')}</span></div>
+                <div class="info-row"><span class="info-label">備品番号</span><span>${escapeHtml(displayHistoryValue(getLendManagementNumber(target)))}</span></div>
+                <div class="info-row"><span class="info-label">備品名</span><span>${escapeHtml(displayHistoryValue(target.asset_name, '備品名未取得'))}</span></div>
+                <div class="info-row"><span class="info-label">シリアル番号</span><span>${escapeHtml(displayHistoryValue(target.serial))}</span></div>
                 <div class="info-row"><span class="info-label">返却日</span><span>${escapeHtml(input.returnDate || '')}</span></div>
                 <div class="info-row"><span class="info-label">実行者</span><span>${escapeHtml(input.returner || '')}</span></div>
             `;

@@ -2,3 +2,10 @@
     color: #c62828;
     font-size: 0.8em;
 }
+
+.item-edit-modal-window {
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}

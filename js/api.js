@@ -3,10 +3,10 @@ import { getAdminToken, clearAdminToken } from './token.js';
 
 
 //開発環境用APIベースURL
-const API_BASE_URL = 'http://localhost:8443';
+// const API_BASE_URL = 'http://localhost:8443';
 
 // 本番環境用APIベースURL
-// const API_BASE_URL = '';
+const API_BASE_URL = '';
 
 
 
