@@ -1,0 +1,29 @@
+<div class="screen-content">
+    <h2>計算機管理ログイン</h2>
+    <div class="registration-page-lead">
+        NWサーバ班のメンバ以外は計算機管理機能にログインできません。
+    </div>
+
+    <p id="computer-login-error" class="form-feedback"></p>
+
+    <form id="form-computer-login" onsubmit="event.preventDefault(); ComputerController.login();">
+        <div class="form-group registration-section-card">
+            <label>担当者名</label>
+            <input type="text" id="computer-operator-name" placeholder="例: 山田 太郎" autocomplete="off" required>
+
+            <div class="mt-20">
+                <label>アクセスコード</label>
+                <input type="password" id="computer-access-code" placeholder="任意のコードを入力" required>
+            </div>
+
+            <p class="registration-sub-note">
+                バックエンド認証とは連携していません。入力された担当者名は、このブラウザセッション内の表示と導線制御のみに使用します。
+            </p>
+        </div>
+    </form>
+
+    <div class="nav-buttons registration-nav-buttons">
+        <button class="back-btn" onclick="Router.to('main-menu')">戻る</button>
+        <button class="primary-btn" onclick="ComputerController.login()">ログイン</button>
+    </div>
+</div>

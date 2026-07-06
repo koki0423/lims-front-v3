@@ -2,63 +2,62 @@
     <h2>検索結果</h2>
 
     <form id="form-search-result">
-        <div class="menu-grid two-col" style="gap: 20px;">
+        <div class="search-result-grid">
             <div>
                 <div class="form-group">
                     <label>管理番号</label>
-                    <input type="text" id="disp-mgmt-num" readonly style="background:#eef; color:#000; font-weight:bold;">
+                    <input type="text" id="disp-mgmt-num" class="field-readonly-highlight" readonly>
                 </div>
 
                 <div class="form-group">
                     <label>備品名</label>
-                    <input type="text" id="disp-name" readonly style="background:#f9f9f9; color:#555;">
+                    <input type="text" id="disp-name" class="field-readonly-soft" readonly>
                 </div>
                 <div class="form-group">
                     <label>メーカー</label>
-                    <input type="text" id="disp-maker" readonly style="background:#f9f9f9; color:#555;">
+                    <input type="text" id="disp-maker" class="field-readonly-soft" readonly>
                 </div>
                 <div class="form-group">
                     <label>型番</label>
-                    <input type="text" id="disp-model" readonly style="background:#f9f9f9; color:#555;">
+                    <input type="text" id="disp-model" class="field-readonly-soft" readonly>
                 </div>
                 <div class="form-group">
                     <label>シリアル番号</label>
-                    <input type="text" id="disp-serial" readonly style="background:#f9f9f9; color:#555;">
+                    <input type="text" id="disp-serial" class="field-readonly-soft" readonly>
                 </div>
             </div>
 
             <div>
                 <div class="form-group">
                     <label>状態 (ステータス)</label>
-                    <input type="text" id="disp-status" readonly style="background:#fff3cd; color:#555; font-weight:bold;">
+                    <input type="text" id="disp-status" class="field-readonly-warning" readonly>
                 </div>
 
                 <div class="form-group">
                     <label>備品ジャンル</label>
-                    <input type="text" id="disp-genre" readonly style="background:#f9f9f9; color:#555;">
+                    <input type="text" id="disp-genre" class="field-readonly-soft" readonly>
                 </div>
                 <div class="form-group">
                     <label>現在地 / 保管場所</label>
-                    <input type="text" id="disp-location" readonly style="background:#f9f9f9; color:#555;">
+                    <input type="text" id="disp-location" class="field-readonly-soft" readonly>
                 </div>
                 <div class="form-group">
                     <label>購入日</label>
-                    <input type="text" id="disp-date" readonly style="background:#f9f9f9; color:#555;">
+                    <input type="text" id="disp-date" class="field-readonly-soft" readonly>
                 </div>
                 <div class="form-group">
                     <label>管理者 / 登録者</label>
-                    <input type="text" id="disp-registrant" readonly style="background:#f9f9f9; color:#555;">
+                    <input type="text" id="disp-registrant" class="field-readonly-soft" readonly>
                 </div>
                 <div class="form-group">
                     <label>備考</label>
-                    <input type="text" id="disp-remarks" readonly style="background:#f9f9f9; color:#555;">
+                    <input type="text" id="disp-remarks" class="field-readonly-soft" readonly>
                 </div>
             </div>
         </div>
 
-        <div class="nav-buttons" style="margin-top: 20px;">
-            <button type="button" class="back-btn" onclick="SearchController.backToSearch()"
-                style="width: 200px;">戻る</button>
+        <div class="nav-buttons nav-buttons-compact">
+            <button type="button" class="back-btn search-back-btn" onclick="SearchController.backToSearch()">戻る</button>
         </div>
     </form>
 </div>

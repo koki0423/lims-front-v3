@@ -2,8 +2,8 @@
     <h2>返却 > 候補選択</h2>
     <p>複数の未返却データが見つかりました。返却対象を選択してください。</p>
 
-    <div style="background: #fff; padding: 10px; border-radius: 4px; overflow-x: auto;">
-        <table class="data-table" style="width: 100%; min-width: 600px;">
+    <div class="panel-scroll">
+        <table class="data-table table-min-600">
             <thead>
                 <tr>
                     <th>備品番号</th>
@@ -17,7 +17,7 @@
         </table>
     </div>
 
-    <div class="nav-buttons" style="margin-top: 20px;">
+    <div class="nav-buttons nav-buttons-compact">
         <button class="back-btn" onclick="LendReturnController.backToReturnSearch()">再検索</button>
     </div>
 </div>

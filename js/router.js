@@ -1,4 +1,4 @@
-import { getAdminToken } from './token.js';
+import { getAdminToken, getComputerAccessGranted } from './token.js';
 
 const loadRegistrationModule = () => import('../modules/registration/logic.js');
 const loadDisposalModule = () => import('../modules/disposal/logic.js');
@@ -8,6 +8,7 @@ const loadSearchModule = () => import('../modules/search/logic.js');
 const loadCommonModule = () => import('../modules/common/logic.js');
 const loadAdminModule = () => import('../modules/admin/logic.js');
 const loadMainMenuModule = () => import('../modules/main/logic.js');
+const loadComputersModule = () => import('../modules/computers/logic.js');
 
 // ルート定義: 画面IDとファイルパス、初期化処理の紐付け
 const routes = {
@@ -178,6 +179,42 @@ const routes = {
         init: (module) => module.initComplete()
     },
 
+    // === 計算機管理 ===
+    'computer-login': {
+        path: 'modules/computers/login.html',
+        title: '計算機管理ログイン',
+        loader: loadComputersModule,
+        init: (module) => module.initComputers('login')
+    },
+    'computer-main': {
+        path: 'modules/computers/main_menu.html',
+        title: '計算機管理',
+        requiresComputerAccess: true,
+        loader: loadComputersModule,
+        init: (module) => module.initComputers('main')
+    },
+    'computer-details': {
+        path: 'modules/computers/details.html',
+        title: '計算機詳細管理',
+        requiresComputerAccess: true,
+        loader: loadComputersModule,
+        init: (module) => module.initComputers('details')
+    },
+    'computer-parts': {
+        path: 'modules/computers/parts.html',
+        title: '計算機部品管理',
+        requiresComputerAccess: true,
+        loader: loadComputersModule,
+        init: (module) => module.initComputers('parts')
+    },
+    'computer-configurations': {
+        path: 'modules/computers/configurations.html',
+        title: '計算機構成履歴管理',
+        requiresComputerAccess: true,
+        loader: loadComputersModule,
+        init: (module) => module.initComputers('configurations')
+    },
+
     // === 管理者機能 ===
     'admin-login': { path: 'modules/admin/login.html', title: '管理者ログイン', loader: loadAdminModule },
     'admin-main': { path: 'modules/admin/main_menu.html', title: '管理者メニュー', requiresAuth: true, loader: loadAdminModule },
@@ -224,6 +261,12 @@ export const Router = {
             const token = getAdminToken();
             if (!token) {
                 resolvedRouteKey = 'admin-login';
+                route = routes[resolvedRouteKey];
+            }
+        } else if (route.requiresComputerAccess) {
+            const granted = getComputerAccessGranted();
+            if (!granted) {
+                resolvedRouteKey = 'computer-login';
                 route = routes[resolvedRouteKey];
             }
         }

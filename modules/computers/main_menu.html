@@ -1,0 +1,32 @@
+<div class="screen-content">
+    <h2>計算機管理</h2>
+
+    <div class="registration-page-lead">
+        計算機本体・部品・構成履歴をこの画面群で管理します。対象の備品そのものは、先に通常の備品登録で作成しておいてください。
+    </div>
+
+    <div class="computer-operator-strip">
+        <span class="computer-operator-label">現在の担当者</span>
+        <strong id="computer-operator-display">-</strong>
+    </div>
+
+    <div class="menu-grid two-col">
+        <button class="menu-btn large-text" onclick="Router.to('computer-details')">
+            計算機詳細管理
+            <span class="sub-text">ホスト名・IP・OS・用途を管理</span>
+        </button>
+        <button class="menu-btn large-text" onclick="Router.to('computer-parts')">
+            計算機部品管理
+            <span class="sub-text">部品備品の使用状態と仕様を管理</span>
+        </button>
+        <button class="menu-btn large-text" onclick="Router.to('computer-configurations')">
+            計算機構成履歴管理
+            <span class="sub-text">本体と部品の構成履歴を登録・更新</span>
+        </button>
+    </div>
+
+    <div class="nav-buttons registration-nav-buttons">
+        <button class="back-btn" onclick="Router.to('main-menu')">通常メニューへ戻る</button>
+        <button class="primary-btn" onclick="ComputerController.logout()">ログアウト</button>
+    </div>
+</div>

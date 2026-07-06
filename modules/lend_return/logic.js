@@ -411,7 +411,7 @@ function renderReturnSelection() {
     }
 
     if (!returnState.searchResults || returnState.searchResults.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">候補がありません</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">候補がありません</td></tr>';
         return;
     }
 
@@ -421,7 +421,7 @@ function renderReturnSelection() {
             <td>${escapeHtml(getLendQuantity(item))}</td>
             <td>${escapeHtml(item.borrower_id || item.borrower || '')}</td>
             <td>${escapeHtml(formatDate(item.lent_at || item.created_at || ''))}</td>
-            <td style="text-align:center;">
+            <td class="table-cell-center">
                 <button class="sm-btn" onclick="LendReturnController.selectReturnTarget(${index})">選択</button>
             </td>
         </tr>
@@ -912,7 +912,7 @@ export function initLendReturn(view) {
 
         if (display && target) {
             display.innerHTML = `
-                <div class="info-row"><span class="info-label">貸出番号</span><span style="font-size:0.8em">${escapeHtml(getLendKey(target))}</span></div>
+                <div class="info-row"><span class="info-label">貸出番号</span><span class="inline-key">${escapeHtml(getLendKey(target))}</span></div>
                 <div class="info-row"><span class="info-label">備品番号</span><span>${escapeHtml(target.management_number || target.itemId || '')}</span></div>
                 <div class="info-row"><span class="info-label">返却日</span><span>${escapeHtml(input.returnDate || '')}</span></div>
                 <div class="info-row"><span class="info-label">実行者</span><span>${escapeHtml(input.returner || '')}</span></div>

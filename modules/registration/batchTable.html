@@ -6,7 +6,7 @@
         <div class="simple-toolbar">
             <button type="button" class="secondary-btn" onclick="RegController.addTableBatchRow()">行を追加</button>
         </div>
-        <div id="table-input-table" style="margin-top: 12px;"></div>
+        <div id="table-input-table" class="mt-12"></div>
     </div>
 
     <div class="form-group">
@@ -18,7 +18,7 @@
                 <option value="CODE128">バーコード(Code128)</option>
             </select>
         </div>
-        <div class="info-row" style="margin-top: 8px;">
+        <div class="info-row mt-8">
             <span class="info-label">テープ幅</span>
             <select id="labelTapeWidth" name="labelTapeWidth">
                 <option value="9" selected>9 mm</option>
@@ -26,7 +26,7 @@
                 <option value="18">18 mm</option>
             </select>
         </div>
-        <div class="info-row" style="margin-top: 8px;">
+        <div class="info-row mt-8">
             <label>
                 <input type="checkbox" id="labelHalfcut" name="labelHalfcut" checked disabled>
                 ハーフカットを有効にする
@@ -37,12 +37,12 @@
     <div class="form-group" id="table-preview-section">
         <label>登録前プレビュー</label>
         <div id="table-preview-status"></div>
-        <div id="table-preview-summary" style="margin-top: 12px;"></div>
-        <div id="table-preview-issues" style="margin-top: 12px;"></div>
-        <div id="table-preview-table" style="margin-top: 12px;"></div>
+        <div id="table-preview-summary" class="mt-12"></div>
+        <div id="table-preview-issues" class="mt-12"></div>
+        <div id="table-preview-table" class="mt-12"></div>
     </div>
 
-    <div class="nav-buttons" style="margin-top: 60px;">
+    <div class="nav-buttons nav-buttons-spacious">
         <button class="back-btn" onclick="Router.to('reg-batch-select')">戻る</button>
         <button type="button" class="secondary-btn" id="table-reset-btn" onclick="RegController.resetTableBatchInput()">クリア</button>
         <button type="button" class="secondary-btn" id="table-preview-btn" onclick="RegController.prepareTableBatchPreview()">プレビューを作成</button>

@@ -55,6 +55,14 @@ function resetItemFilterCache() {
     itemListState.filterCache.items = null;
 }
 
+function setReadonlyState(control, isReadonly) {
+    if (!control) {
+        return;
+    }
+
+    control.classList.toggle('readonly-input', isReadonly);
+}
+
 async function fetchAllFilteredItems() {
     if (
         Array.isArray(itemListState.filterCache.items)
@@ -166,7 +174,7 @@ async function loadItemPage(page = 1) {
         itemListState.totalPages = 1;
 
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="5" style="color:red; text-align:center;">データの取得に失敗しました</td></tr>`;
+            tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state table-empty-state-error">データの取得に失敗しました</td></tr>';
         }
     } finally {
         if (loader) {
@@ -360,18 +368,19 @@ window.ItemListController = {
             statusSelect.disabled = false;
             locInput.disabled = false;
             notesInput.disabled = false;
-            qtyInput.style.backgroundColor = "#fff";
-            locInput.style.backgroundColor = "#fff";
+            qtyInput.disabled = false;
+            setReadonlyState(qtyInput, false);
+            setReadonlyState(locInput, false);
 
             const isSerial = Boolean(asset.serial && asset.serial.trim() !== "");
             if (isSerial) {
                 qtyInput.disabled = true;
-                qtyInput.style.backgroundColor = "#f5f5f5";
-                if (qtyMsg) qtyMsg.style.display = "inline";
+                setReadonlyState(qtyInput, true);
+                if (qtyMsg) qtyMsg.hidden = false;
             } else {
                 qtyInput.disabled = false;
-                qtyInput.style.backgroundColor = "#fff";
-                if (qtyMsg) qtyMsg.style.display = "none";
+                setReadonlyState(qtyInput, false);
+                if (qtyMsg) qtyMsg.hidden = true;
             }
 
             if (asset.status_id === 4) {
@@ -382,11 +391,14 @@ window.ItemListController = {
                 statusSelect.disabled = true;
                 qtyInput.disabled = true;
                 locInput.disabled = true;
-                qtyInput.style.backgroundColor = "#f5f5f5";
-                locInput.style.backgroundColor = "#f5f5f5";
+                setReadonlyState(qtyInput, true);
+                setReadonlyState(locInput, true);
             }
 
-            document.getElementById('edit-modal').style.display = 'flex';
+            const editModal = document.getElementById('edit-modal');
+            if (editModal) {
+                editModal.hidden = false;
+            }
         } catch (error) {
             console.error(error);
             alert('データの取得に失敗しました');
@@ -394,7 +406,10 @@ window.ItemListController = {
     },
 
     closeModal() {
-        document.getElementById('edit-modal').style.display = 'none';
+        const editModal = document.getElementById('edit-modal');
+        if (editModal) {
+            editModal.hidden = true;
+        }
     },
 
     async update() {
@@ -449,7 +464,7 @@ window.ItemListController = {
         if (codeSel) codeSel.value = itemListState.label.codeType || 'QR';
         if (widthSel) widthSel.value = String(itemListState.label.tapeWidth || 9);
 
-        modal.style.display = 'flex';
+        modal.hidden = false;
     },
 
     openLabelModalByIndex(index) {
@@ -464,7 +479,7 @@ window.ItemListController = {
 
     closeLabelModal() {
         const modal = document.getElementById('label-modal');
-        if (modal) modal.style.display = 'none';
+        if (modal) modal.hidden = true;
     },
 
     async submitLabelPrint() {
@@ -586,7 +601,7 @@ function renderList() {
     if (!tbody) return;
 
     if (itemListState.items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">該当する備品はありません</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">該当する備品はありません</td></tr>';
         if (paginationDiv) {
             paginationDiv.innerHTML = '';
         }
@@ -601,13 +616,13 @@ function renderList() {
 
         return `
             <tr>
-                <td style="padding: 12px 5px;">${escapeHtml(displayId)}</td>
-                <td style="padding: 12px 5px;">${escapeHtml(displayName)}</td>
-                <td style="padding: 12px 5px;">${escapeHtml(item.quantity)}</td>
-                <td style="text-align:center; padding: 12px 5px;">
+                <td class="table-cell-compact">${escapeHtml(displayId)}</td>
+                <td class="table-cell-compact">${escapeHtml(displayName)}</td>
+                <td class="table-cell-compact">${escapeHtml(item.quantity)}</td>
+                <td class="table-cell-compact table-cell-center">
                     <span class="status-badge ${statusObj.class}">${statusObj.name}</span>
                 </td>
-                <td style="text-align:center; padding: 12px 5px;">
+                <td class="table-cell-compact table-cell-center">
                     <button class="sm-btn" onclick="ItemListController.editByIndex(${index})">詳細</button>
                     <button class="sm-btn" onclick="ItemListController.openLabelModalByIndex(${index})">ラベル印刷</button>
                 </td>
@@ -634,7 +649,7 @@ function renderPaginationControls(container, totalPages, currentPage) {
     for (let i = 1; i <= totalPages; i++) {
         if (totalPages > 10 && Math.abs(currentPage - i) > 2 && i !== 1 && i !== totalPages) {
             if (html.slice(-3) !== '...') {
-                html += '<span style="padding:0 5px;">...</span>';
+                html += '<span class="pagination-ellipsis">...</span>';
             }
             continue;
         }

@@ -258,56 +258,6 @@ export function initSearch(view) {
 //                 switch (key) {
 //                     case 'mgmt': return m.management_number || as.management_number || '';
 //                     case 'name': return m.name || '';
-//                     // case 'qty': return Number(as.quantity || 0); // 今回の表示に数量はないので不要かも
-//                     case 'status': return Number(as.status_id || 0);
-//                     case 'location': return as.location || as.default_location || as.owner || '';
-//                     default: return '';
-//                 }
-//             };
-
-//             const valA = getVal(a, searchState.sortKey);
-//             const valB = getVal(b, searchState.sortKey);
-
-//             if (valA < valB) return searchState.sortOrder === 'asc' ? -1 : 1;
-//             if (valA > valB) return searchState.sortOrder === 'asc' ? 1 : -1;
-//             return 0;
-//         });
-//     }
-//     searchState.displayList = list;
-
-//     // ゼロチェック
-//     if (filteredCandidates.length === 0) {
-//         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">該当する条件の備品はありません</td></tr>';
-//         return;
-//     }
-
-//     // map処理
-//     tbody.innerHTML = list.map((item, index) => {
-//         const m = item.master || {};
-//         const a = item.asset || {};
-//         const statusName = getStatusName(a.status_id);
-//         const mgmtNum = m.management_number || a.management_number || '-';
-//         const location = a.location || a.default_location || a.owner || '-';
-
-//         return `
-//             <tr>
-//                 <td style="padding: 12px 5px;">${mgmtNum}</td>
-//                 <td style="padding: 12px 5px;">${m.name || '-'}</td>
-//                 <td style="padding: 12px 5px;">
-//                     <span class="status-badge status-${a.status_id}">${statusName}</span>
-//                 </td>
-//                 <td style="padding: 12px 5px;">${location}</td>
-//                 <td style="text-align: center; padding: 12px 5px;">
-//                     <button class="sm-btn" onclick="SearchController.selectCandidate(${index})">
-//                         詳細
-//                     </button>
-//                 </td>
-//             </tr>
-//         `;
-//     }).join('');
-
-//     if (window.SearchController.updateSortHeaderStyles) { 
-//         // logic.js内に定義が必要ですが、SearchControllerのメソッドにするか、外に書くかで呼び出し方が変わります
 //          // もしSearchController内に入れてないなら、HTML側のonclickと同様の呼び出しが必要
 //          // 簡易的には:
 //          document.querySelectorAll('.sort-header').forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
@@ -371,7 +321,7 @@ export function initSearchList() {
 
     // ゼロチェック (list を見る)
     if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">該当する条件の備品はありません</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">該当する条件の備品はありません</td></tr>';
         return;
     }
 
@@ -386,13 +336,13 @@ export function initSearchList() {
 
         return `
             <tr>
-                <td style="padding: 12px 5px;">${escapeHtml(mgmtNum)}</td>
-                <td style="padding: 12px 5px;">${escapeHtml(m.name || '-')}</td>
-                <td style="padding: 12px 5px;">
+                <td class="table-cell-compact">${escapeHtml(mgmtNum)}</td>
+                <td class="table-cell-compact">${escapeHtml(m.name || '-')}</td>
+                <td class="table-cell-compact">
                     <span class="status-badge ${statusInfo.class}">${statusInfo.name}</span>
                 </td>
-                <td style="padding: 12px 5px;">${escapeHtml(location)}</td>
-                <td style="text-align: center; padding: 12px 5px;">
+                <td class="table-cell-compact">${escapeHtml(location)}</td>
+                <td class="table-cell-compact table-cell-center">
                     <button class="sm-btn" onclick="SearchController.selectCandidate(${index})">
                         詳細
                     </button>

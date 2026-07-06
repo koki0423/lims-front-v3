@@ -120,12 +120,12 @@ window.AdminController = {
             if (!tbody) return;
 
             tbody.innerHTML = genres.map((genre, index) => {
-                const disabledStyle = genre.is_disabled ? 'background:#eee; color:#999;' : '';
+                const rowClass = genre.is_disabled ? ' class="admin-genre-row--disabled"' : '';
                 const statusText = genre.is_disabled ? '無効' : '有効';
                 const btnText = genre.is_disabled ? '有効化' : '無効化';
 
                 return `
-                    <tr style="${disabledStyle}">
+                    <tr${rowClass}>
                         <td>${escapeHtml(genre.id)}</td>
                         <td>${escapeHtml(genre.name)}</td>
                         <td>${escapeHtml(genre.code)}</td>

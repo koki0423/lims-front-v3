@@ -1,4 +1,6 @@
 export const ADMIN_TOKEN_KEY = "admin_token";
+export const COMPUTER_ACCESS_KEY = "computer_access_granted";
+export const COMPUTER_OPERATOR_NAME_KEY = "computer_operator_name";
 
 function getSessionStorage() {
   if (typeof window === 'undefined' || !window.sessionStorage) {
@@ -68,4 +70,42 @@ export function clearAdminToken() {
   if (legacyStorageRef) {
     legacyStorageRef.removeItem(ADMIN_TOKEN_KEY);
   }
+}
+
+export function setComputerAccess(operatorName) {
+  const sessionStorageRef = getSessionStorage();
+  if (!sessionStorageRef) {
+    return;
+  }
+
+  sessionStorageRef.setItem(COMPUTER_ACCESS_KEY, '1');
+  sessionStorageRef.setItem(COMPUTER_OPERATOR_NAME_KEY, String(operatorName || '').trim());
+}
+
+export function getComputerAccessGranted() {
+  const sessionStorageRef = getSessionStorage();
+  if (!sessionStorageRef) {
+    return false;
+  }
+
+  return sessionStorageRef.getItem(COMPUTER_ACCESS_KEY) === '1';
+}
+
+export function getComputerOperatorName() {
+  const sessionStorageRef = getSessionStorage();
+  if (!sessionStorageRef) {
+    return '';
+  }
+
+  return sessionStorageRef.getItem(COMPUTER_OPERATOR_NAME_KEY) || '';
+}
+
+export function clearComputerAccess() {
+  const sessionStorageRef = getSessionStorage();
+  if (!sessionStorageRef) {
+    return;
+  }
+
+  sessionStorageRef.removeItem(COMPUTER_ACCESS_KEY);
+  sessionStorageRef.removeItem(COMPUTER_OPERATOR_NAME_KEY);
 }

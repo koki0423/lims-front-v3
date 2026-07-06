@@ -44,7 +44,7 @@
                 <button type="button" class="secondary-btn" onclick="RegController.generateSimpleSerials()">シリアル連番を設定</button>
             </div>
         </div>
-        <div id="simple-detail-table" style="margin-top: 12px;"></div>
+        <div id="simple-detail-table" class="mt-12"></div>
     </div>
 
     <div class="form-group">
@@ -56,7 +56,7 @@
                 <option value="CODE128">バーコード(Code128)</option>
             </select>
         </div>
-        <div class="info-row" style="margin-top: 8px;">
+        <div class="info-row mt-8">
             <span class="info-label">テープ幅</span>
             <select id="labelTapeWidth" name="labelTapeWidth">
                 <option value="9" selected>9 mm</option>
@@ -64,7 +64,7 @@
                 <option value="18">18 mm</option>
             </select>
         </div>
-        <div class="info-row" style="margin-top: 8px;">
+        <div class="info-row mt-8">
             <label>
                 <input type="checkbox" id="labelHalfcut" name="labelHalfcut" checked disabled>
                 ハーフカットを有効にする
@@ -75,12 +75,12 @@
     <div class="form-group" id="simple-preview-section">
         <label>登録前プレビュー</label>
         <div id="simple-preview-status"></div>
-        <div id="simple-preview-summary" style="margin-top: 12px;"></div>
-        <div id="simple-preview-issues" style="margin-top: 12px;"></div>
-        <div id="simple-preview-table" style="margin-top: 12px;"></div>
+        <div id="simple-preview-summary" class="mt-12"></div>
+        <div id="simple-preview-issues" class="mt-12"></div>
+        <div id="simple-preview-table" class="mt-12"></div>
     </div>
 
-    <div class="nav-buttons" style="margin-top: 60px;">
+    <div class="nav-buttons nav-buttons-spacious">
         <button class="back-btn" onclick="Router.to('reg-batch-select')">戻る</button>
         <button type="button" class="secondary-btn" id="simple-reset-btn" onclick="RegController.resetSimpleBatchInput()">クリア</button>
         <button type="button" class="secondary-btn" id="simple-preview-btn" onclick="RegController.prepareSimpleBatchPreview()">プレビューを作成</button>

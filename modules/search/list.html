@@ -1,7 +1,7 @@
 <div class="screen-content">
     <h2>検索結果: 候補一覧</h2>
     <p>条件に一致する備品が複数見つかりました。</p>
-    <div class="filters-container" style="margin-bottom: 15px;">
+    <div class="filters-container">
         <label>絞り込み:</label>
         <button class="filter-btn" data-status="1" onclick="SearchController.toggleFilter('1')">正常</button>
         <button class="filter-btn" data-status="2" onclick="SearchController.toggleFilter('2')">故障</button>
@@ -10,35 +10,8 @@
         <button class="filter-btn" data-status="5" onclick="SearchController.toggleFilter('5')">廃棄済み</button>
         <button class="filter-btn" data-status="6" onclick="SearchController.toggleFilter('6')">紛失</button>
     </div>
-    <div style="background: #fff; padding: 10px; border-radius: 4px; overflow-x: auto;">
-        <table class="data-table" style="width: 100%; min-width: 600px;">
-            <style>
-                /* ソート可能なヘッダーのスタイル */
-                .sort-header {
-                    cursor: pointer;
-                    user-select: none;
-                    /* ダブルクリックで選択されないように */
-                    position: relative;
-                }
-
-                .sort-header:hover {
-                    background-color: #f0f0f0;
-                    /* ホバー時の色 */
-                }
-
-                /* 昇順・降順の矢印（CSSで簡易実装） */
-                .sort-asc::after {
-                    content: " ▲";
-                    font-size: 0.8em;
-                    color: #555;
-                }
-
-                .sort-desc::after {
-                    content: " ▼";
-                    font-size: 0.8em;
-                    color: #555;
-                }
-            </style>
+    <div class="panel-scroll">
+        <table class="data-table table-min-600">
             <thead>
                 <tr>
                     <th class="sort-header" data-key="mgmt" onclick="SearchController.sortBy('mgmt')">
@@ -61,7 +34,7 @@
         </table>
     </div>
 
-    <div class="nav-buttons" style="margin-top: 20px;">
+    <div class="nav-buttons nav-buttons-compact">
         <button class="back-btn" onclick="Router.to('search-top')">再検索</button>
     </div>
 </div>

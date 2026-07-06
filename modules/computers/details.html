@@ -1,0 +1,57 @@
+<div class="screen-content">
+    <h2>計算機管理 > 計算機詳細管理</h2>
+
+    <div class="registration-page-lead">
+        管理番号から既存の備品を読み込み、その備品マスタに対して計算機詳細を登録・更新します。未登録の備品は先に通常の備品登録で作成してください。
+    </div>
+
+    <div class="form-group registration-section-card">
+        <label>対象計算機の読み込み</label>
+        <div class="input-with-btn registration-search-row">
+            <input type="text" id="computer-detail-mgmt-input" placeholder="管理番号を入力">
+            <button type="button" class="primary-btn" onclick="ComputerController.loadComputerDetailAsset()">備品を読み込む</button>
+            <button type="button" class="secondary-btn" onclick="ComputerController.resetComputerDetail()">クリア</button>
+        </div>
+        <div id="computer-detail-status" class="mt-12"></div>
+        <div id="computer-detail-summary" class="mt-12"></div>
+    </div>
+
+    <div class="form-group registration-section-card">
+        <label>計算機詳細</label>
+        <div class="simple-common-grid computer-form-grid">
+            <div>
+                <label for="computer-detail-hostname">ホスト名</label>
+                <input type="text" id="computer-detail-hostname" placeholder="例: pc-a">
+            </div>
+            <div>
+                <label for="computer-detail-ip">IPアドレス</label>
+                <input type="text" id="computer-detail-ip" placeholder="例: 192.168.10.101">
+            </div>
+            <div>
+                <label for="computer-detail-mac">MACアドレス</label>
+                <input type="text" id="computer-detail-mac" placeholder="例: AA:BB:CC:DD:EE:01">
+            </div>
+            <div>
+                <label for="computer-detail-os">OS</label>
+                <input type="text" id="computer-detail-os" placeholder="例: Windows 11 Pro">
+            </div>
+            <div class="registration-grid-full">
+                <label for="computer-detail-purpose">利用目的</label>
+                <input type="text" id="computer-detail-purpose" placeholder="例: student workstation">
+            </div>
+            <div>
+                <label for="computer-detail-login-user">ログインユーザ</label>
+                <input type="text" id="computer-detail-login-user" placeholder="例: lab-user">
+            </div>
+            <div class="registration-grid-full">
+                <label for="computer-detail-note">備考</label>
+                <textarea id="computer-detail-note" rows="3" placeholder="任意"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="nav-buttons registration-nav-buttons">
+        <button class="back-btn" onclick="Router.to('computer-main')">戻る</button>
+        <button class="primary-btn" id="computer-detail-save-btn" onclick="ComputerController.saveComputerDetail()">登録する</button>
+    </div>
+</div>

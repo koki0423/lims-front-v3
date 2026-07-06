@@ -1,0 +1,133 @@
+.menu-btn {
+    flex: 1;
+    padding: 30px;
+    background: #f8f9fa;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+    text-align: center;
+}
+
+.menu-btn:hover {
+    background: #e9ecef;
+}
+
+.menu-btn.primary {
+    background: #555;
+    color: #fff;
+}
+
+.menu-btn.large-text {
+    font-size: 1.3rem;
+    padding: 50px 20px;
+}
+
+.sub-text {
+    display: block;
+    margin-top: 5px;
+    color: var(--muted-text-color);
+    font-size: 0.8rem;
+    font-weight: normal;
+}
+
+.sub-text-muted {
+    font-size: 0.85rem;
+}
+
+.nfc-btn,
+.reader-btn {
+    padding: 0 15px;
+    color: var(--text-color);
+    background: #ddd;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+button.back-btn,
+button.next-btn,
+button.primary-btn,
+button.secondary-btn,
+button.sm-btn {
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button.back-btn {
+    padding: 10px 30px;
+    background: #fff;
+    border: 1px solid #999;
+}
+
+button.next-btn,
+button.primary-btn {
+    padding: 10px 30px;
+    color: #fff;
+    background: var(--accent-color);
+    border: none;
+    font-weight: bold;
+}
+
+button.secondary-btn {
+    padding: 10px 18px;
+    color: #244532;
+    background: #fff;
+    border: 1px solid #c9d6cf;
+    font-weight: bold;
+}
+
+button.secondary-btn:hover {
+    background: #f3f7f4;
+}
+
+button.sm-btn {
+    padding: 6px 10px;
+    color: #244532;
+    background: #fff;
+    border: 1px solid #c9d6cf;
+    font-size: 0.85rem;
+}
+
+button.sm-btn:hover {
+    background: #f3f7f4;
+}
+
+.small-btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+.filters-container {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+
+.filter-btn {
+    padding: 6px 14px;
+    color: #555;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.filter-btn:hover {
+    background: #f0f0f0;
+}
+
+.filter-btn.active {
+    color: #fff;
+    background: #333;
+    border-color: #333;
+    font-weight: bold;
+}

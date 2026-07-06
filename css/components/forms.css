@@ -1,0 +1,147 @@
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+input[type="text"],
+input[type="date"],
+input[type="number"],
+input[type="password"],
+select,
+textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 1rem;
+}
+
+input[readonly],
+input:disabled,
+select:disabled,
+textarea:disabled {
+    color: #555;
+    background-color: var(--disabled-bg-color);
+}
+
+.input-lg {
+    padding: 15px !important;
+}
+
+.input-with-btn {
+    display: flex;
+    gap: 10px;
+}
+
+.input-with-btn > input,
+.input-with-btn > select,
+.input-with-btn > textarea {
+    min-width: 0;
+    flex: 1;
+}
+
+.input-file input[type="file"] {
+    width: 100%;
+    padding: 6px;
+    color: var(--text-color);
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.input-file input[type="file"]:hover {
+    border-color: #006400;
+}
+
+.input-file input[type="file"]::file-selector-button {
+    margin-right: 15px;
+    padding: 6px 12px;
+    color: var(--text-color);
+    background-color: #f0f0f0;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.input-file input[type="file"]:hover::file-selector-button {
+    background-color: #e0e0e0;
+}
+
+.readonly-input {
+    color: #666 !important;
+    background-color: var(--readonly-bg-color) !important;
+    border: 1px solid #ddd !important;
+}
+
+input.field-readonly-soft {
+    color: #555 !important;
+    background: #f9f9f9 !important;
+}
+
+input.field-readonly-highlight {
+    color: #000 !important;
+    background: #eef !important;
+    font-weight: bold;
+}
+
+input.field-readonly-warning {
+    color: #555 !important;
+    background: #fff3cd !important;
+    font-weight: bold;
+}
+
+.form-feedback {
+    min-height: 1.2em;
+    margin-bottom: 20px;
+    color: #c62828;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.content-note {
+    color: var(--muted-text-color);
+    line-height: 1.6;
+}
+
+.content-note-small {
+    font-size: 0.9em;
+}
+
+.content-note-xs {
+    font-size: 0.8em;
+}
+
+.inline-key {
+    font-size: 0.8em;
+}
+
+.info-row {
+    display: flex;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--soft-border-color);
+}
+
+.info-label {
+    width: 40%;
+    color: #555;
+    font-weight: bold;
+}
+
+.info-display > .info-row:first-child {
+    padding-top: 0;
+}
+
+.info-display > .info-row:last-child {
+    border-bottom: none;
+}

@@ -34,9 +34,11 @@ client.interceptors.response.use(
     (err) => {
         const status = err?.response?.status;
         if (status === 401) {
+            const hadAdminToken = Boolean(getAdminToken());
             clearAdminToken();
-            // Router は window.Router を使う（router.jsで global 公開してる） :contentReference[oaicite:8]{index=8}
-            if (window.Router) window.Router.to('admin-login');
+            if (hadAdminToken && window.Router) {
+                window.Router.to('admin-login');
+            }
         }
         console.error('API Error:', err);
         return Promise.reject(err);
@@ -128,5 +130,29 @@ export const API = {
         list: (all = false) => client.get(`/api/v2/genres${all ? '?all=true' : ''}`),
         create: (payload) => client.post('/api/v2/genres', payload),
         update: (id, payload) => client.put(`/api/v2/genres/${id}`, payload),
+    },
+
+    computers: {
+        details: {
+            create: (payload) => client.post('/api/v2/computer-details', payload),
+            get: (assetMasterId) => client.get(`/api/v2/computer-details/${assetMasterId}`),
+            update: (assetMasterId, payload) => client.put(`/api/v2/computer-details/${assetMasterId}`, payload),
+        },
+        parts: {
+            create: (payload) => client.post('/api/v2/computer-parts', payload),
+            get: (assetMasterId) => client.get(`/api/v2/computer-parts/${assetMasterId}`),
+            update: (assetMasterId, payload) => client.put(`/api/v2/computer-parts/${assetMasterId}`, payload),
+        },
+        configurations: {
+            create: (payload) => client.post('/api/v2/computer-configurations', payload),
+            list: (computerAssetMasterId) => client.get(`/api/v2/computers/${computerAssetMasterId}/configurations`),
+            update: (configurationId, payload) => client.put(`/api/v2/computer-configurations/${configurationId}`, payload),
+        },
+        partTypes: {
+            list: () => client.get('/api/v2/part-types'),
+        },
+        usageStatuses: {
+            list: () => client.get('/api/v2/usage-statuses'),
+        }
     }
 };

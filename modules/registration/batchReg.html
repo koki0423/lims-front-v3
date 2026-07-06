@@ -1,12 +1,12 @@
 <div class="screen-content">
     <h2>新規登録 > 管理方法選択 > まとめて登録 > CSVファイルから登録</h2>
     <div class="form-group">
-        <div style="margin-bottom: 10px;">
+        <div class="mb-10">
             <button type="button" class="secondary-btn" onclick="RegController.downloadBatchTemplate()">
                 テンプレートをダウンロード
             </button>
         </div>
-        <div style="margin-top: 8px; font-size: 0.9em; color: #666;">
+        <div class="content-note content-note-small mt-8">
             説明書はExcel形式、入力用テンプレートはCSV形式でダウンロードされます。CSVに入力してそのままアップロードしてください。
         </div>
         <label>CSVファイルを選択</label>
@@ -23,7 +23,7 @@
                 <option value="CODE128">バーコード(Code128)</option>
             </select>
         </div>
-        <div class="info-row" style="margin-top: 8px;">
+        <div class="info-row mt-8">
             <span class="info-label">テープ幅</span>
             <select id="labelTapeWidth" name="labelTapeWidth">
                 <option value="9" selected>9 mm</option>
@@ -31,7 +31,7 @@
                 <option value="18">18 mm</option>
             </select>
         </div>
-        <div class="info-row" style="margin-top: 8px;">
+        <div class="info-row mt-8">
             <label>
                 <input type="checkbox" id="labelHalfcut" name="labelHalfcut" checked disabled>
                 ハーフカットを有効にする
@@ -42,12 +42,12 @@
     <div class="form-group" id="batch-preview-section">
         <label>登録前プレビュー</label>
         <div id="batch-preview-status"></div>
-        <div id="batch-preview-summary" style="margin-top: 12px;"></div>
-        <div id="batch-preview-issues" style="margin-top: 12px;"></div>
-        <div id="batch-preview-table" style="margin-top: 12px;"></div>
+        <div id="batch-preview-summary" class="mt-12"></div>
+        <div id="batch-preview-issues" class="mt-12"></div>
+        <div id="batch-preview-table" class="mt-12"></div>
     </div>
 
-    <div class="nav-buttons" style="margin-top: 60px;">
+    <div class="nav-buttons nav-buttons-spacious">
         <button class="back-btn" onclick="Router.to('reg-batch-select')">戻る</button>
         <button type="button" class="secondary-btn" id="batch-reset-btn" onclick="RegController.resetBatchPreview()">クリア</button>
         <button type="button" class="secondary-btn" id="batch-preview-btn" onclick="RegController.prepareBatchPreview()">プレビューを作成</button>

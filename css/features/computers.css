@@ -1,0 +1,98 @@
+.computer-operator-strip {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 12px 14px;
+    background: #f7fbf8;
+    border: 1px solid #dfe9e3;
+    border-radius: 8px;
+}
+
+.computer-operator-label {
+    color: #52615a;
+    font-size: 0.9rem;
+}
+
+.computer-summary-card {
+    padding: 14px 16px;
+    background: #fbfcfb;
+    border: 1px solid #e2e8e4;
+    border-radius: 10px;
+}
+
+.computer-summary-card-title {
+    margin-bottom: 10px;
+    color: #355243;
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+.computer-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.computer-summary-item {
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #edf1ee;
+    border-radius: 8px;
+}
+
+.computer-summary-item span {
+    display: block;
+    margin-bottom: 6px;
+    color: #67746d;
+    font-size: 0.82rem;
+}
+
+.computer-summary-item strong {
+    color: #1f2c24;
+    font-size: 0.98rem;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.computer-form-grid textarea {
+    min-height: 96px;
+    resize: vertical;
+}
+
+.computer-inline-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.computer-config-table th,
+.computer-config-table td {
+    white-space: nowrap;
+}
+
+.computer-config-table td:nth-child(6) {
+    white-space: normal;
+    min-width: 220px;
+}
+
+@media (max-width: 640px) {
+    .computer-operator-strip {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .computer-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .computer-inline-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .computer-inline-actions > button {
+        width: 100%;
+    }
+}

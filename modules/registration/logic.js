@@ -250,7 +250,7 @@ function getManualInputArea() {
 
 function isManualInputOpen() {
     const manualArea = getManualInputArea();
-    return Boolean(manualArea) && manualArea.style.display !== 'none';
+    return Boolean(manualArea) && !manualArea.hidden;
 }
 
 function syncManualInputControls(isOpen) {
@@ -267,8 +267,10 @@ function setManualInputOpen(isOpen) {
     const toggleBtn = document.getElementById('toggle-manual-btn');
     if (!manualArea) return;
 
-    manualArea.style.display = isOpen ? 'block' : 'none';
+    manualArea.hidden = !isOpen;
     if (isOpen) {
+        manualArea.classList.remove('fade-in');
+        void manualArea.offsetWidth;
         manualArea.classList.add('fade-in');
     }
 
@@ -1663,7 +1665,7 @@ function renderSimpleBatchView() {
         purchaseDateEl.value = simpleBatchState.common.purchaseDate;
     }
     if (serialToolsEl) {
-        serialToolsEl.style.display = isSimpleIndividualMode() ? 'flex' : 'none';
+        serialToolsEl.hidden = !isSimpleIndividualMode();
     }
     if (detailTableEl) {
         detailTableEl.innerHTML = renderSimpleDetailRows();
@@ -2510,21 +2512,21 @@ function updateInputVisibility() {
     if (isBulk) {
         // === 一括管理モードの場合 ===
         // シリアル番号: 非表示 & 必須解除
-        if (serialGroup) serialGroup.style.display = 'none';
+        if (serialGroup) serialGroup.hidden = true;
         if (serialInput) serialInput.required = false;
 
         // 数量: 表示 & 必須化
-        if (quantityGroup) quantityGroup.style.display = 'block';
+        if (quantityGroup) quantityGroup.hidden = false;
         if (quantityInput) quantityInput.required = true;
 
     } else {
         // === 個別管理モードの場合 ===
         // シリアル番号: 表示 & 必須化
-        if (serialGroup) serialGroup.style.display = 'block';
+        if (serialGroup) serialGroup.hidden = false;
         if (serialInput) serialInput.required = true;
 
         // 数量: 非表示 & 必須解除
-        if (quantityGroup) quantityGroup.style.display = 'none';
+        if (quantityGroup) quantityGroup.hidden = true;
         if (quantityInput) quantityInput.required = false;
     }
 }

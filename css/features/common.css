@@ -1,0 +1,19 @@
+.complete-screen {
+    padding-top: 50px;
+    text-align: center;
+}
+
+.complete-icon {
+    margin-bottom: 20px;
+    color: #4caf50;
+    font-size: 4rem;
+}
+
+.complete-message {
+    margin-bottom: 30px;
+}
+
+.complete-note {
+    margin-bottom: 40px;
+    color: #666;
+}

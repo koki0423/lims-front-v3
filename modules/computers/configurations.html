@@ -1,0 +1,68 @@
+<div class="screen-content">
+    <h2>計算機管理 > 計算機構成履歴管理</h2>
+
+    <div class="registration-page-lead">
+        計算機本体の管理番号を読み込み、その本体に紐づく構成履歴を管理します。部品備品も既存の管理番号から解決して登録します。
+    </div>
+
+    <div class="form-group registration-section-card">
+        <label>対象計算機の読み込み</label>
+        <div class="input-with-btn registration-search-row">
+            <input type="text" id="computer-config-computer-mgmt-input" placeholder="計算機本体の管理番号を入力">
+            <button type="button" class="primary-btn" onclick="ComputerController.loadConfigurationComputer()">計算機を読み込む</button>
+            <button type="button" class="secondary-btn" onclick="ComputerController.resetConfigurationContext()">クリア</button>
+        </div>
+        <div id="computer-configuration-status" class="mt-12"></div>
+        <div id="computer-configuration-computer-summary" class="mt-12"></div>
+    </div>
+
+    <div class="form-group registration-section-card">
+        <label>現在の構成履歴</label>
+        <div class="computer-inline-actions">
+            <button type="button" class="secondary-btn" onclick="ComputerController.refreshConfigurationList()">一覧を再読み込み</button>
+        </div>
+        <div id="computer-configuration-list-status" class="mt-12"></div>
+        <div id="computer-configuration-list" class="mt-12"></div>
+    </div>
+
+    <div class="form-group registration-section-card">
+        <label id="computer-configuration-form-title">構成履歴の新規登録</label>
+        <div class="simple-common-grid computer-form-grid">
+            <div class="registration-grid-full">
+                <label for="computer-config-part-mgmt-input">部品の管理番号</label>
+                <div class="input-with-btn">
+                    <input type="text" id="computer-config-part-mgmt-input" placeholder="部品の管理番号を入力">
+                    <button type="button" class="primary-btn" onclick="ComputerController.resolveConfigurationPart()">部品を読み込む</button>
+                </div>
+            </div>
+            <div class="registration-grid-full">
+                <div id="computer-configuration-part-summary"></div>
+            </div>
+            <div>
+                <label for="computer-config-part-type">部品種別</label>
+                <select id="computer-config-part-type"></select>
+            </div>
+            <div>
+                <label for="computer-config-installed-at">装着日</label>
+                <input type="date" id="computer-config-installed-at">
+            </div>
+            <div>
+                <label for="computer-config-removed-at">取り外し日</label>
+                <input type="date" id="computer-config-removed-at">
+            </div>
+            <div class="registration-grid-full">
+                <label for="computer-config-note">備考</label>
+                <textarea id="computer-config-note" rows="3" placeholder="任意"></textarea>
+            </div>
+        </div>
+
+        <div class="computer-inline-actions mt-20">
+            <button type="button" class="secondary-btn" onclick="ComputerController.clearConfigurationEditor()">編集をクリア</button>
+            <button type="button" class="primary-btn" id="computer-configuration-save-btn" onclick="ComputerController.saveConfiguration()">登録する</button>
+        </div>
+    </div>
+
+    <div class="nav-buttons registration-nav-buttons">
+        <button class="back-btn" onclick="Router.to('computer-main')">戻る</button>
+    </div>
+</div>
