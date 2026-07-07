@@ -1,5 +1,10 @@
 <div class="screen-content">
     <h2>廃棄登録</h2>
+    <div class="screen-tools-stack">
+        <div id="disposal-feedback" class="batch-status-banner info page-feedback" hidden></div>
+        <div id="disposal-device-status"></div>
+        <div id="disposal-asset-preview"></div>
+    </div>
     <form id="form-disposal">
         <div class="form-group">
             <label>備品番号</label>
@@ -28,7 +33,7 @@
         </div>
     </form>
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.to('disposal-top')">戻る</button>
+        <button class="back-btn" onclick="Router.back('disposal-top')">戻る</button>
         <button class="next-btn" onclick="DisposalController.toConfirm()">次へ</button>
     </div>
 </div>

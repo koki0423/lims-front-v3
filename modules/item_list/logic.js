@@ -2,6 +2,10 @@ import { API } from '../../js/api.js';
 import { AppState } from '../../js/app_state.js';
 import { escapeHtml } from '../../js/dom_utils.js';
 import { normalizePageResponse } from '../../js/pagination_utils.js';
+import { mountDeviceStatusPanel } from '../../js/device_status.js';
+import { runWithButtonLoading, setControlsDisabled } from '../../js/ui_loading.js';
+import { hidePageFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
+import { loadViewState, saveViewState } from '../../js/view_state.js';
 
 // === 状態管理 ===
 const itemListState = {
@@ -20,9 +24,13 @@ const itemListState = {
         tapeWidth: 9,
         halfcut: true
     },
+    loading: false,
+    updating: false,
+    labelPrinting: false,
 };
 
 const FILTER_FETCH_BATCH_SIZE = 200;
+const ITEM_LIST_VIEW_STATE_KEY = 'item-list-view';
 
 // ステータス定義（JSONのstatus_idに対応）
 const STATUS_MAP = {
@@ -36,6 +44,67 @@ const STATUS_MAP = {
 
 async function ensureGenresLoaded() {
     await AppState.loadGenres({ all: true });
+}
+
+function restoreItemListState() {
+    const persisted = loadViewState(ITEM_LIST_VIEW_STATE_KEY, {});
+    itemListState.currentFilter = persisted.currentFilter ?? '';
+    itemListState.currentPage = Math.max(1, Number(persisted.currentPage) || 1);
+
+    const itemsPerPage = Number(persisted.itemsPerPage);
+    if ([10, 20, 50, 100].includes(itemsPerPage)) {
+        itemListState.itemsPerPage = itemsPerPage;
+    }
+}
+
+function persistItemListState() {
+    saveViewState(ITEM_LIST_VIEW_STATE_KEY, {
+        currentFilter: itemListState.currentFilter,
+        currentPage: itemListState.currentPage,
+        itemsPerPage: itemListState.itemsPerPage
+    });
+}
+
+function syncItemListPerPageSelect() {
+    const perPage = document.getElementById('item-list-per-page');
+    if (perPage) {
+        perPage.value = String(itemListState.itemsPerPage);
+    }
+}
+
+function updateItemListSummary(state = itemListState) {
+    const total = document.getElementById('item-list-total');
+    const page = document.getElementById('item-list-page');
+    const range = document.getElementById('item-list-range');
+    const safeTotalItems = Number(state.totalItems) || 0;
+    const safeTotalPages = Math.max(1, Number(state.totalPages) || 1);
+    const safeCurrentPage = Math.min(Math.max(1, Number(state.currentPage) || 1), safeTotalPages);
+
+    if (total) {
+        total.textContent = `${safeTotalItems}件`;
+    }
+    if (page) {
+        page.textContent = `${safeCurrentPage} / ${safeTotalPages}`;
+    }
+    if (range) {
+        if (safeTotalItems === 0) {
+            range.textContent = '0件';
+        } else {
+            const start = (safeCurrentPage - 1) * state.itemsPerPage + 1;
+            const end = Math.min(safeCurrentPage * state.itemsPerPage, safeTotalItems);
+            range.textContent = `${start}-${end}件`;
+        }
+    }
+}
+
+function setItemListLoading(isLoading) {
+    itemListState.loading = isLoading;
+    setControlsDisabled([
+        '#item-list-filter-controls .filter-btn',
+        '#item-list-per-page',
+        '#pagination-controls .page-btn',
+        '#item-list-body .sm-btn'
+    ], isLoading);
 }
 
 function getItemFilterFn() {
@@ -127,6 +196,8 @@ async function loadItemPage(page = 1) {
     const tbody = document.getElementById('item-list-body');
     const loader = document.getElementById('loading-spinner');
     const safePage = Math.max(1, Number(page) || 1);
+    hidePageFeedback('item-list-feedback');
+    syncItemListPerPageSelect();
     const params = {
         limit: itemListState.itemsPerPage,
         offset: (safePage - 1) * itemListState.itemsPerPage
@@ -140,6 +211,7 @@ async function loadItemPage(page = 1) {
     if (loader) {
         loader.style.display = 'block';
     }
+    setItemListLoading(true);
 
     try {
         await ensureGenresLoaded();
@@ -165,6 +237,7 @@ async function loadItemPage(page = 1) {
         itemListState.totalItems = normalized.totalItems;
         itemListState.totalPages = normalized.totalPages;
         itemListState.currentPage = Math.min(safePage, normalized.totalPages);
+        persistItemListState();
 
         renderList();
     } catch (error) {
@@ -172,6 +245,9 @@ async function loadItemPage(page = 1) {
         itemListState.items = [];
         itemListState.totalItems = 0;
         itemListState.totalPages = 1;
+        itemListState.currentPage = 1;
+        showPageFeedback('item-list-feedback', '備品一覧の取得に失敗しました。', 'error');
+        updateItemListSummary();
 
         if (tbody) {
             tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state table-empty-state-error">データの取得に失敗しました</td></tr>';
@@ -180,6 +256,7 @@ async function loadItemPage(page = 1) {
         if (loader) {
             loader.style.display = 'none';
         }
+        setItemListLoading(false);
     }
 }
 
@@ -318,6 +395,10 @@ function buildListLabelRow(masterPayload, managementNumber) {
 
 window.ItemListController = {
     async toggleFilter(status) {
+        if (itemListState.loading) {
+            return;
+        }
+
         if (itemListState.currentFilter == status) {
             itemListState.currentFilter = '';
         } else {
@@ -326,13 +407,15 @@ window.ItemListController = {
 
         resetItemFilterCache();
         updateFilterButtonStyles();
+        itemListState.currentPage = 1;
+        persistItemListState();
         await loadItemPage(1);
     },
 
     editByIndex(index) {
         const item = itemListState.items[index];
         if (!item) {
-            alert('対象データが見つかりません');
+            showPageFeedback('item-list-feedback', '対象データが見つかりません。', 'error');
             return;
         }
 
@@ -342,6 +425,7 @@ window.ItemListController = {
     // 詳細・編集モーダルを開く
     async edit(managementNumber) {
         try {
+            hidePageFeedback('item-list-feedback');
             const data = await API.assets.getPair(managementNumber);
             const asset = data.asset;
             const master = data.master;
@@ -401,7 +485,7 @@ window.ItemListController = {
             }
         } catch (error) {
             console.error(error);
-            alert('データの取得に失敗しました');
+            showApiPageFeedback('item-list-feedback', error, 'データの取得に失敗しました。');
         }
     },
 
@@ -413,6 +497,11 @@ window.ItemListController = {
     },
 
     async update() {
+        if (itemListState.updating) {
+            return;
+        }
+
+        hidePageFeedback('item-list-edit-feedback');
         const id = document.getElementById('edit-asset-id').value;
         const statusSelect = document.getElementById('edit-status');
         const statusOriginalVal = document.getElementById('edit-status-original').value;
@@ -437,21 +526,41 @@ window.ItemListController = {
             payload.quantity = Number(qtyInput.value);
         }
 
+        itemListState.updating = true;
+        setControlsDisabled([
+            '#form-item-edit input',
+            '#form-item-edit select',
+            '#form-item-edit .back-btn'
+        ], true);
         try {
-            await API.assets.update(id, payload);
-            alert('更新しました');
-            this.closeModal();
-            resetItemFilterCache();
-            await loadItemPage(itemListState.currentPage);
+            await runWithButtonLoading('#item-update-btn', { busyText: '更新中...' }, async () => {
+                await API.assets.update(id, payload);
+                this.closeModal();
+                showPageFeedback('item-list-feedback', '更新しました。', 'success');
+                resetItemFilterCache();
+                await loadItemPage(itemListState.currentPage);
+            });
         } catch (error) {
             console.error(error);
-            alert('更新に失敗しました: ' + (error.response?.data?.error || error.message));
+            showApiPageFeedback('item-list-edit-feedback', error, '更新に失敗しました。');
+        } finally {
+            itemListState.updating = false;
+            setControlsDisabled([
+                '#form-item-edit input',
+                '#form-item-edit select',
+                '#form-item-edit .back-btn'
+            ], false);
         }
     },
 
     openLabelModal(managementNumber) {
         const modal = document.getElementById('label-modal');
         if (!modal) return;
+        hidePageFeedback('item-list-label-feedback');
+        mountDeviceStatusPanel('item-list-label-device-status', {
+            title: '印刷機器',
+            devices: ['tepra']
+        });
 
         const mgmtHidden = document.getElementById('label-mgmt-number');
         const mgmtDisp = document.getElementById('label-target-display');
@@ -470,7 +579,7 @@ window.ItemListController = {
     openLabelModalByIndex(index) {
         const item = itemListState.items[index];
         if (!item) {
-            alert('対象データが見つかりません');
+            showPageFeedback('item-list-feedback', '対象データが見つかりません。', 'error');
             return;
         }
 
@@ -483,14 +592,17 @@ window.ItemListController = {
     },
 
     async submitLabelPrint() {
+        if (itemListState.labelPrinting) {
+            return;
+        }
+
         const mgmtHidden = document.getElementById('label-mgmt-number');
         const codeSel = document.getElementById('label-code-type');
         const widthSel = document.getElementById('label-tape-width');
-        const btn = document.getElementById('label-print-btn');
 
         const managementNumber = mgmtHidden ? mgmtHidden.value : '';
         if (!managementNumber) {
-            alert('管理番号が取得できません');
+            showPageFeedback('item-list-label-feedback', '管理番号が取得できません。', 'error');
             return;
         }
 
@@ -507,51 +619,66 @@ window.ItemListController = {
         itemListState.label.tapeWidth = tapeWidth;
         itemListState.label.halfcut = true;
 
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = '印刷中...';
-        }
-
         await ensureGenresLoaded();
 
+        itemListState.labelPrinting = true;
+        setControlsDisabled([
+            '#form-label-print select',
+            '#form-label-print .back-btn'
+        ], true);
         try {
-            const data = await API.assets.getPair(managementNumber);
-            const master = data.master;
+            await runWithButtonLoading('#label-print-btn', { busyText: '印刷中...' }, async () => {
+                const data = await API.assets.getPair(managementNumber);
+                const master = data.master;
 
-            const label = buildListLabelRow(master, managementNumber);
-            const type = codeType === 'QR' ? 'qrcode' : 'code128';
+                const label = buildListLabelRow(master, managementNumber);
+                const type = codeType === 'QR' ? 'qrcode' : 'code128';
 
-            await printLabelsWithTepra(
-                [label],
-                tapeWidth,
-                type,
-                true
-            );
+                await printLabelsWithTepra(
+                    [label],
+                    tapeWidth,
+                    type,
+                    true
+                );
 
-            alert('ラベル印刷を実行しました');
-            this.closeLabelModal();
+                this.closeLabelModal();
+                showPageFeedback('item-list-feedback', 'ラベル印刷を実行しました。', 'success');
+            });
         } catch (error) {
             console.error('印刷エラー:', error);
-            alert('印刷に失敗しました: ' + (error.response?.data?.error || error.message));
+            showApiPageFeedback('item-list-label-feedback', error, '印刷に失敗しました。');
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '印刷';
-            }
+            itemListState.labelPrinting = false;
+            setControlsDisabled([
+                '#form-label-print select',
+                '#form-label-print .back-btn'
+            ], false);
         }
     },
 
     async changePerPage(val) {
+        if (itemListState.loading) {
+            return;
+        }
+
         itemListState.itemsPerPage = Number(val);
+        itemListState.currentPage = 1;
+        persistItemListState();
         await loadItemPage(1);
     },
 
     async changePage(page) {
+        if (itemListState.loading) {
+            return;
+        }
+
         const targetPage = Number(page);
         if (targetPage < 1 || targetPage > itemListState.totalPages) {
             return;
         }
 
+        itemListState.currentPage = targetPage;
+        persistItemListState();
         await loadItemPage(targetPage);
     },
 };
@@ -581,17 +708,28 @@ function buildListPrintPayload(masterPayload, managementNumber, labelSetting) {
 
 // === 初期化処理 ===
 export async function initItemList() {
-    itemListState.currentFilter = '';
-    itemListState.currentPage = 1;
+    restoreItemListState();
     resetItemFilterCache();
+    syncItemListPerPageSelect();
     updateFilterButtonStyles();
+    hidePageFeedback('item-list-feedback');
+    hidePageFeedback('item-list-edit-feedback');
+    hidePageFeedback('item-list-label-feedback');
+    mountDeviceStatusPanel('item-list-device-status', {
+        title: '印刷機器',
+        devices: ['tepra']
+    });
+    mountDeviceStatusPanel('item-list-label-device-status', {
+        title: '印刷機器',
+        devices: ['tepra']
+    });
 
     const tbody = document.getElementById('item-list-body');
     if (tbody) {
         tbody.innerHTML = '';
     }
 
-    await loadItemPage(1);
+    await loadItemPage(itemListState.currentPage);
 }
 
 // === リスト描画 ===
@@ -599,6 +737,7 @@ function renderList() {
     const tbody = document.getElementById('item-list-body');
     const paginationDiv = document.getElementById('pagination-controls');
     if (!tbody) return;
+    updateItemListSummary();
 
     if (itemListState.items.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">該当する備品はありません</td></tr>';
@@ -613,18 +752,23 @@ function renderList() {
         const statusObj = STATUS_MAP[statusId] || { name: '不明', class: 'badge-gray' };
         const displayId = item.management_number || item.asset_id || '-';
         const displayName = item.name || `(マスタID: ${item.asset_master_id})`;
+        const displayQty = item.quantity === undefined || item.quantity === null || item.quantity === ''
+            ? '-'
+            : String(item.quantity);
 
         return `
             <tr>
-                <td class="table-cell-compact">${escapeHtml(displayId)}</td>
-                <td class="table-cell-compact">${escapeHtml(displayName)}</td>
-                <td class="table-cell-compact">${escapeHtml(item.quantity)}</td>
-                <td class="table-cell-compact table-cell-center">
+                <td>${escapeHtml(displayId)}</td>
+                <td>${escapeHtml(displayName)}</td>
+                <td class="item-list-qty-cell">${escapeHtml(displayQty)}</td>
+                <td class="item-list-status-cell">
                     <span class="status-badge ${statusObj.class}">${statusObj.name}</span>
                 </td>
-                <td class="table-cell-compact table-cell-center">
-                    <button class="sm-btn" onclick="ItemListController.editByIndex(${index})">詳細</button>
-                    <button class="sm-btn" onclick="ItemListController.openLabelModalByIndex(${index})">ラベル印刷</button>
+                <td class="history-action-cell">
+                    <div class="item-list-action-group">
+                        <button class="sm-btn" onclick="ItemListController.editByIndex(${index})">詳細</button>
+                        <button class="sm-btn" onclick="ItemListController.openLabelModalByIndex(${index})">ラベル印刷</button>
+                    </div>
                 </td>
             </tr>
         `;

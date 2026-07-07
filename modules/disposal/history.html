@@ -1,9 +1,5 @@
 <div class="screen-content">
     <h2>廃棄履歴</h2>
-    <div class="registration-page-lead history-page-lead">
-        廃棄済みの履歴を参照します。表示件数の切替とページ移動で過去の記録を確認できます。
-    </div>
-
     <div class="history-summary-grid">
         <div class="batch-summary-card">
             <span>総件数</span>
@@ -18,6 +14,41 @@
             <strong id="disposal-history-range">-</strong>
         </div>
     </div>
+
+    <div class="history-filter-toggle-row">
+        <button type="button" id="disposal-history-query-toggle-btn" class="back-btn" aria-expanded="false" onclick="DisposalController.toggleHistoryFilters()">
+            絞り込み条件を開く
+        </button>
+    </div>
+
+    <form id="disposal-history-query-form" class="history-filter-panel" onsubmit="event.preventDefault(); DisposalController.applyHistoryFilters();" hidden>
+        <div class="history-filter-grid">
+            <div class="form-group">
+                <label for="disposal-history-query-mgmt">備品番号</label>
+                <input type="text" id="disposal-history-query-mgmt" placeholder="例: PC-0001">
+            </div>
+            <div class="form-group">
+                <label for="disposal-history-query-name">備品名</label>
+                <input type="text" id="disposal-history-query-name" placeholder="例: ノートPC">
+            </div>
+            <div class="form-group">
+                <label for="disposal-history-query-operator">担当者</label>
+                <input type="text" id="disposal-history-query-operator" placeholder="例: 24A1234">
+            </div>
+            <div class="form-group">
+                <label for="disposal-history-date-from">廃棄日 From</label>
+                <input type="date" id="disposal-history-date-from">
+            </div>
+            <div class="form-group">
+                <label for="disposal-history-date-to">廃棄日 To</label>
+                <input type="date" id="disposal-history-date-to">
+            </div>
+        </div>
+        <div class="history-filter-actions">
+            <button type="button" id="disposal-history-clear-btn" class="back-btn" onclick="DisposalController.clearHistoryFilters()">条件クリア</button>
+            <button type="submit" id="disposal-history-apply-btn" class="primary-btn">絞り込む</button>
+        </div>
+    </form>
 
     <div class="history-toolbar">
         <div class="rows-per-page history-rows-per-page">
@@ -38,6 +69,16 @@
     </div>
 
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.to('disposal-top')">戻る</button>
+        <button class="back-btn" onclick="Router.back('disposal-top')">戻る</button>
+    </div>
+</div>
+
+<div id="disposal-history-detail-modal" class="modal-overlay" hidden>
+    <div class="modal-window history-detail-modal-window">
+        <h3 id="disposal-history-detail-title">廃棄履歴詳細</h3>
+        <div id="disposal-history-detail-content"></div>
+        <div class="modal-buttons">
+            <button type="button" id="disposal-history-detail-close-btn" class="back-btn" onclick="DisposalController.closeHistoryDetail()">閉じる</button>
+        </div>
     </div>
 </div>

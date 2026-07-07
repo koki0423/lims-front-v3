@@ -1,5 +1,6 @@
 <div class="screen-content">
     <h2>返却 > 備品特定</h2>
+    <div id="return-search-feedback" class="batch-status-banner info page-feedback" hidden></div>
     <div class="form-group">
         <label>備品番号 または 貸出先</label>
         <div class="input-with-btn">
@@ -8,7 +9,7 @@
         <p class="content-note content-note-xs mt-8">※複数件ヒットした場合は候補一覧から選択します</p>
     </div>
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.to('return-menu')">戻る</button>
-        <button class="primary-btn" onclick="LendReturnController.searchLending()">参照</button>
+        <button id="return-search-back-btn" class="back-btn" onclick="Router.to('return-menu')">戻る</button>
+        <button id="return-search-btn" class="primary-btn" onclick="LendReturnController.searchLending()">参照</button>
     </div>
 </div>

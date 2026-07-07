@@ -8,6 +8,10 @@
     <div class="registration-page-lead">
         保管情報、登録者、ラベル設定を入力します。入力内容は次の画面で確認できます。
     </div>
+    <div class="screen-tools-stack">
+        <div id="registration-step2-feedback" class="batch-status-banner info page-feedback" hidden></div>
+        <div id="registration-step2-device-status"></div>
+    </div>
     <form id="form-reg-2">
         <div class="form-group registration-section-card">
             <label>追加情報</label>
@@ -62,7 +66,7 @@
         </div>
     </form>
     <div class="nav-buttons registration-nav-buttons">
-        <button class="back-btn" onclick="Router.to('reg-input-1')">戻る</button>
+        <button class="back-btn" onclick="Router.back('reg-input-1')">戻る</button>
         <button class="next-btn" onclick="RegController.saveStep2()">次へ</button>
     </div>
 </div>

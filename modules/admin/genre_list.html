@@ -1,12 +1,13 @@
 <div class="screen-content">
     <h2>ジャンル管理</h2>
+    <div id="admin-genres-feedback" class="batch-status-banner info page-feedback" hidden></div>
 
     <div class="form-group">
         <label>新規追加</label>
         <div class="input-with-btn">
             <input type="text" id="new-genre-name" placeholder="ジャンル名 (例: 消耗品)">
             <input type="text" id="new-genre-code" class="w-100px" placeholder="コード (例: SUP)">
-            <button class="primary-btn" onclick="AdminController.addGenre()">追加</button>
+            <button id="admin-genre-add-btn" class="primary-btn" onclick="AdminController.addGenre()">追加</button>
         </div>
     </div>
 
@@ -24,6 +25,6 @@
     </table>
     
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.to('admin-main')">戻る</button>
+        <button id="admin-genres-back-btn" class="back-btn" onclick="Router.to('admin-main')">戻る</button>
     </div>
 </div>

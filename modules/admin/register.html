@@ -1,7 +1,7 @@
 <div class="screen-content">
     <h2>管理者追加登録画面</h2>
 
-    <p id="register-error-msg" class="form-feedback"></p>
+    <div id="admin-register-feedback" class="batch-status-banner info page-feedback" hidden></div>
 
     <form id="form-admin-reg">
         <div class="form-group">
@@ -20,7 +20,7 @@
     </form>
 
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.to('admin-main')">戻る</button>
-        <button class="primary-btn" onclick="AdminController.submitRegister()">登録実行</button>
+        <button id="admin-register-back-btn" class="back-btn" onclick="Router.to('admin-main')">戻る</button>
+        <button id="admin-register-submit-btn" class="primary-btn" onclick="AdminController.submitRegister()">登録実行</button>
     </div>
 </div>

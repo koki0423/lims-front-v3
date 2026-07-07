@@ -1,8 +1,9 @@
 <div class="screen-content">
     <h2>貸出登録確認</h2>
+    <div id="lend-confirm-feedback" class="batch-status-banner info page-feedback" hidden></div>
     <div id="lend-confirm-view" class="info-display"></div>
     <div class="nav-buttons">
-        <button class="back-btn" onclick="Router.to('reg-select')">戻る</button>
-        <button class="primary-btn" onclick="LendReturnController.submitLend()">登録</button>
+        <button id="lend-confirm-back-btn" class="back-btn" onclick="Router.to('lend-input')">戻る</button>
+        <button id="lend-submit-btn" class="primary-btn" onclick="LendReturnController.submitLend()">登録</button>
     </div>
 </div>

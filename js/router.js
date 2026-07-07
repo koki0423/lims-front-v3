@@ -116,7 +116,12 @@ const routes = {
         loader: loadLendReturnModule,
         init: (module) => module.initLendReturn('lend-history')
     },
-    'lend-input': { path: 'modules/lend_return/lend_input.html', title: '貸出登録', loader: loadLendReturnModule },
+    'lend-input': {
+        path: 'modules/lend_return/lend_input.html',
+        title: '貸出登録',
+        loader: loadLendReturnModule,
+        init: (module) => module.initLendReturn('lend-input')
+    },
     'lend-confirm': {
         path: 'modules/lend_return/lend_confirm.html',
         title: '貸出確認',
@@ -132,7 +137,12 @@ const routes = {
         loader: loadLendReturnModule,
         init: (module) => module.initLendReturn('return-history')
     },
-    'return-search': { path: 'modules/lend_return/return_search.html', title: '返却対象検索', loader: loadLendReturnModule },
+    'return-search': {
+        path: 'modules/lend_return/return_search.html',
+        title: '返却対象検索',
+        loader: loadLendReturnModule,
+        init: (module) => module.initLendReturn('return-search')
+    },
     'return-select': {
         path: 'modules/lend_return/return_select.html',
         title: '返却対象選択',
@@ -156,7 +166,8 @@ const routes = {
     'search-top': {
         path: 'modules/search/input.html',
         title: '備品検索',
-        loader: loadSearchModule
+        loader: loadSearchModule,
+        init: (module) => module.initSearch('input')
     },
     'search-result': {
         path: 'modules/search/result.html',
@@ -216,14 +227,31 @@ const routes = {
     },
 
     // === 管理者機能 ===
-    'admin-login': { path: 'modules/admin/login.html', title: '管理者ログイン', loader: loadAdminModule },
-    'admin-main': { path: 'modules/admin/main_menu.html', title: '管理者メニュー', requiresAuth: true, loader: loadAdminModule },
-    'admin-register': { path: 'modules/admin/register.html', title: '管理者追加登録', requiresAuth: true, loader: loadAdminModule },
+    'admin-login': {
+        path: 'modules/admin/login.html',
+        title: '管理者ログイン',
+        loader: loadAdminModule,
+        init: (module) => module.initAdmin('login')
+    },
+    'admin-main': {
+        path: 'modules/admin/main_menu.html',
+        title: '管理者メニュー',
+        requiresAuth: true,
+        loader: loadAdminModule,
+        init: (module) => module.initAdmin('main')
+    },
+    'admin-register': {
+        path: 'modules/admin/register.html',
+        title: '管理者追加登録',
+        requiresAuth: true,
+        loader: loadAdminModule,
+        init: (module) => module.initAdmin('register')
+    },
     'admin-genres': {
         path: 'modules/admin/genre_list.html', title: '備品ジャンル管理',
         requiresAuth: true,
         loader: loadAdminModule,
-        init: () => window.AdminController.initGenreMaster()
+        init: (module) => module.initAdmin('genres')
     },
 
 };
@@ -231,6 +259,9 @@ const routes = {
 export const Router = {
     _navigationSeq: 0,
     _templateCache: new Map(),
+    _historyStack: [],
+    _currentRouteKey: '',
+    _baseTitle: document.title || '備品管理システム',
 
     async _loadTemplate(path) {
         if (this._templateCache.has(path)) {
@@ -248,7 +279,7 @@ export const Router = {
     },
 
     // 画面遷移処理
-    async to(routeKey) {
+    async to(routeKey, options = {}) {
         let resolvedRouteKey = routeKey;
         let route = routes[resolvedRouteKey];
 
@@ -296,8 +327,26 @@ export const Router = {
             void container.offsetWidth; // リフロー発生
             container.classList.add('fade-in');
 
-            // タイトル更新（必要であれば）
-            // document.title = route.title; 
+            if (options.clearHistory) {
+                this._historyStack = [];
+            }
+
+            if (
+                !options.skipHistory
+                && !options.replaceCurrent
+                && this._currentRouteKey
+                && this._currentRouteKey !== resolvedRouteKey
+            ) {
+                if (this._historyStack[this._historyStack.length - 1] !== this._currentRouteKey) {
+                    this._historyStack.push(this._currentRouteKey);
+                }
+            }
+
+            this._currentRouteKey = resolvedRouteKey;
+
+            document.title = route.title
+                ? `${route.title} | ${this._baseTitle}`
+                : this._baseTitle;
 
             // 特定の初期化処理があれば実行
             if (route.init) {
@@ -316,9 +365,20 @@ export const Router = {
         }
     },
 
-    back() {
-        // 簡易実装: メインに戻る（本来は履歴スタック管理推奨）
-        this.to('main-menu');
+    back(fallbackRouteKey = 'main-menu') {
+        const previousRouteKey = this._historyStack.pop();
+        if (previousRouteKey) {
+            this.to(previousRouteKey, {
+                skipHistory: true,
+                replaceCurrent: true
+            });
+            return;
+        }
+
+        this.to(fallbackRouteKey, {
+            skipHistory: true,
+            replaceCurrent: true
+        });
     }
 };
 
