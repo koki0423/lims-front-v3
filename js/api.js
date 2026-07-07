@@ -1,5 +1,5 @@
 import axios from 'https://cdn.jsdelivr.net/npm/axios@1.7.2/+esm';
-import { getAdminToken, clearAdminToken } from './token.js';
+import { getAuthToken, clearAuthSession } from './auth_session.js?v=20260707-1';
 
 
 //開発環境用APIベースURL
@@ -21,7 +21,7 @@ const client = axios.create({
 
 // レスポンス処理用インターセプター
 client.interceptors.request.use((config) => {
-    const token = getAdminToken();
+    const token = getAuthToken();
     if (token) {
         if (!config.headers) config.headers = {};
         config.headers['Authorization'] = `Bearer ${token}`;
@@ -33,11 +33,13 @@ client.interceptors.response.use(
     (res) => res.data,
     (err) => {
         const status = err?.response?.status;
-        if (status === 401) {
-            const hadAdminToken = Boolean(getAdminToken());
-            clearAdminToken();
-            if (hadAdminToken && window.Router) {
-                window.Router.to('admin-login');
+        const requestUrl = String(err?.config?.url || '');
+        const isLoginRequest = requestUrl.endsWith('/api/v2/login') || requestUrl === '/api/v2/login';
+        if (status === 401 && !isLoginRequest) {
+            const hadAuthToken = Boolean(getAuthToken());
+            clearAuthSession();
+            if (hadAuthToken && window.Router) {
+                window.Router.to('main-menu', { clearHistory: true });
             }
         }
         console.error('API Error:', err);
@@ -47,6 +49,11 @@ client.interceptors.response.use(
 
 // === 2. エンドポイント定義 (機能ごとにオブジェクトでまとめる) ===
 export const API = {
+    auth: {
+        login: (payload) => client.post('/api/v2/login', payload),
+        me: () => client.get('/api/v2/me'),
+    },
+
     // ■ 備品関連 (assets)
     assets: {
         // マスタ作成
@@ -122,7 +129,6 @@ export const API = {
 
     // 管理者・認証
     admin: {
-        login: (payload) => client.post('/api/v2/login', payload),
         register: (payload) => client.post('/api/v2/register', payload),
     },
 

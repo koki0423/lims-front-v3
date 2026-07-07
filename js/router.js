@@ -1,4 +1,6 @@
-import { getAdminToken, getComputerAccessGranted } from './token.js';
+import { getAuthToken, hasAllCapabilities } from './auth_session.js?v=20260707-1';
+
+const MODULE_VERSION = '20260707-1';
 
 const loadRegistrationModule = () => import('../modules/registration/logic.js');
 const loadDisposalModule = () => import('../modules/disposal/logic.js');
@@ -6,9 +8,9 @@ const loadItemListModule = () => import('../modules/item_list/logic.js');
 const loadLendReturnModule = () => import('../modules/lend_return/logic.js');
 const loadSearchModule = () => import('../modules/search/logic.js');
 const loadCommonModule = () => import('../modules/common/logic.js');
-const loadAdminModule = () => import('../modules/admin/logic.js');
+const loadAdminModule = () => import(`../modules/admin/logic.js?v=${MODULE_VERSION}`);
 const loadMainMenuModule = () => import('../modules/main/logic.js');
-const loadComputersModule = () => import('../modules/computers/logic.js');
+const loadComputersModule = () => import(`../modules/computers/logic.js?v=${MODULE_VERSION}`);
 
 // ルート定義: 画面IDとファイルパス、初期化処理の紐付け
 const routes = {
@@ -200,28 +202,32 @@ const routes = {
     'computer-main': {
         path: 'modules/computers/main_menu.html',
         title: '計算機管理',
-        requiresComputerAccess: true,
+        loginRoute: 'computer-login',
+        requiredCapabilities: ['computers.admin'],
         loader: loadComputersModule,
         init: (module) => module.initComputers('main')
     },
     'computer-details': {
         path: 'modules/computers/details.html',
         title: '計算機詳細管理',
-        requiresComputerAccess: true,
+        loginRoute: 'computer-login',
+        requiredCapabilities: ['computers.admin'],
         loader: loadComputersModule,
         init: (module) => module.initComputers('details')
     },
     'computer-parts': {
         path: 'modules/computers/parts.html',
         title: '計算機部品管理',
-        requiresComputerAccess: true,
+        loginRoute: 'computer-login',
+        requiredCapabilities: ['computers.admin'],
         loader: loadComputersModule,
         init: (module) => module.initComputers('parts')
     },
     'computer-configurations': {
         path: 'modules/computers/configurations.html',
         title: '計算機構成履歴管理',
-        requiresComputerAccess: true,
+        loginRoute: 'computer-login',
+        requiredCapabilities: ['computers.admin'],
         loader: loadComputersModule,
         init: (module) => module.initComputers('configurations')
     },
@@ -236,20 +242,23 @@ const routes = {
     'admin-main': {
         path: 'modules/admin/main_menu.html',
         title: '管理者メニュー',
-        requiresAuth: true,
+        loginRoute: 'admin-login',
+        requiredCapabilities: ['assets.admin'],
         loader: loadAdminModule,
         init: (module) => module.initAdmin('main')
     },
     'admin-register': {
         path: 'modules/admin/register.html',
         title: '管理者追加登録',
-        requiresAuth: true,
+        loginRoute: 'admin-login',
+        requiredCapabilities: ['assets.admin'],
         loader: loadAdminModule,
         init: (module) => module.initAdmin('register')
     },
     'admin-genres': {
         path: 'modules/admin/genre_list.html', title: '備品ジャンル管理',
-        requiresAuth: true,
+        loginRoute: 'admin-login',
+        requiredCapabilities: ['assets.admin'],
         loader: loadAdminModule,
         init: (module) => module.initAdmin('genres')
     },
@@ -288,16 +297,10 @@ export const Router = {
             return;
         }
 
-        if (route.requiresAuth) {
-            const token = getAdminToken();
-            if (!token) {
-                resolvedRouteKey = 'admin-login';
-                route = routes[resolvedRouteKey];
-            }
-        } else if (route.requiresComputerAccess) {
-            const granted = getComputerAccessGranted();
-            if (!granted) {
-                resolvedRouteKey = 'computer-login';
+        if (Array.isArray(route.requiredCapabilities) && route.requiredCapabilities.length > 0) {
+            const token = getAuthToken();
+            if (!token || !hasAllCapabilities(route.requiredCapabilities)) {
+                resolvedRouteKey = route.loginRoute || 'main-menu';
                 route = routes[resolvedRouteKey];
             }
         }

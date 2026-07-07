@@ -1,8 +1,8 @@
 import { Router } from '../../js/router.js';
-import { API } from '../../js/api.js';
+import { API } from '../../js/api.js?v=20260707-1';
 import { AppState } from '../../js/app_state.js';
 import { escapeHtml } from '../../js/dom_utils.js';
-import { setAdminToken, clearAdminToken } from '../../js/token.js';
+import { setAuthToken, setAuthProfile, clearAuthSession, hasCapability } from '../../js/auth_session.js?v=20260707-1';
 import { confirmAction } from '../../js/ui_dialog.js';
 import { runWithButtonLoading, setControlsDisabled } from '../../js/ui_loading.js';
 import { hidePageFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
@@ -122,16 +122,25 @@ window.AdminController = {
         setControlsDisabled(controls, true);
         try {
             await runWithButtonLoading('#admin-login-btn', { busyText: 'ログイン中...' }, async () => {
-                const data = await API.admin.login({ id: idInput.value, password: passInput.value });
+                const data = await API.auth.login({ id: idInput.value, password: passInput.value });
                 if (!data || !data.token) {
                     showPageFeedback('admin-login-feedback', 'ログイン応答が不正です。', 'error');
                     return;
                 }
 
-                setAdminToken(data.token);
+                setAuthToken(data.token);
+                const me = await API.auth.me();
+                if (!hasCapability('assets.admin', me)) {
+                    clearAuthSession();
+                    showPageFeedback('admin-login-feedback', '備品管理の管理者権限がありません。', 'error');
+                    return;
+                }
+
+                setAuthProfile(me);
                 Router.to('admin-main');
             });
         } catch (error) {
+            clearAuthSession();
             showApiPageFeedback('admin-login-feedback', error, 'ログインに失敗しました。');
         } finally {
             setControlsDisabled(controls, false);
@@ -151,7 +160,7 @@ window.AdminController = {
             return;
         }
 
-        clearAdminToken();
+        clearAuthSession();
         Router.to('main-menu');
     },
 
@@ -177,9 +186,11 @@ window.AdminController = {
 
         const id = document.getElementById('admin-id').value;
         const password = new FormData(form).get('password');
+        const role = document.getElementById('admin-role')?.value || 'asset_admin';
         const controls = [
             '#admin-id',
             '#form-admin-reg input[name="password"]',
+            '#admin-role',
             '#form-admin-reg .nfc-btn',
             '#admin-register-back-btn'
         ];
@@ -187,7 +198,7 @@ window.AdminController = {
         setControlsDisabled(controls, true);
         try {
             await runWithButtonLoading('#admin-register-submit-btn', { busyText: '登録中...' }, async () => {
-                await API.admin.register({ id, password, role: "admin" });
+                await API.admin.register({ id, password, role });
                 setAdminFlash('main', '管理者を追加登録しました。', 'success');
                 Router.to('admin-main');
             });

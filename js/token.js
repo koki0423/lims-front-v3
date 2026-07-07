@@ -1,6 +1,6 @@
-export const ADMIN_TOKEN_KEY = "admin_token";
-export const COMPUTER_ACCESS_KEY = "computer_access_granted";
-export const COMPUTER_OPERATOR_NAME_KEY = "computer_operator_name";
+export const AUTH_TOKEN_KEY = "auth_token";
+export const AUTH_PROFILE_KEY = "auth_profile";
+export const ADMIN_TOKEN_KEY = AUTH_TOKEN_KEY;
 
 function getSessionStorage() {
   if (typeof window === 'undefined' || !window.sessionStorage) {
@@ -18,26 +18,32 @@ function getLegacyStorage() {
   return window.localStorage;
 }
 
-export function setAdminToken(token) {
+export function setAuthToken(token) {
   const sessionStorageRef = getSessionStorage();
   const legacyStorageRef = getLegacyStorage();
 
   if (sessionStorageRef) {
-    sessionStorageRef.setItem(ADMIN_TOKEN_KEY, token);
+    sessionStorageRef.setItem(AUTH_TOKEN_KEY, token);
+    sessionStorageRef.removeItem("admin_token");
   }
 
   if (legacyStorageRef) {
-    legacyStorageRef.removeItem(ADMIN_TOKEN_KEY);
+    legacyStorageRef.removeItem(AUTH_TOKEN_KEY);
+    legacyStorageRef.removeItem("admin_token");
   }
 }
 
-export function getAdminToken() {
+export function getAuthToken() {
   const sessionStorageRef = getSessionStorage();
   const legacyStorageRef = getLegacyStorage();
 
   if (sessionStorageRef) {
-    const token = sessionStorageRef.getItem(ADMIN_TOKEN_KEY);
+    const token = sessionStorageRef.getItem(AUTH_TOKEN_KEY) || sessionStorageRef.getItem("admin_token");
     if (token) {
+      if (sessionStorageRef.getItem(AUTH_TOKEN_KEY) !== token) {
+        sessionStorageRef.setItem(AUTH_TOKEN_KEY, token);
+        sessionStorageRef.removeItem("admin_token");
+      }
       return token;
     }
   }
@@ -46,66 +52,106 @@ export function getAdminToken() {
     return null;
   }
 
-  const legacyToken = legacyStorageRef.getItem(ADMIN_TOKEN_KEY);
+  const legacyToken = legacyStorageRef.getItem(AUTH_TOKEN_KEY) || legacyStorageRef.getItem("admin_token");
   if (!legacyToken) {
     return null;
   }
 
   if (sessionStorageRef) {
-    sessionStorageRef.setItem(ADMIN_TOKEN_KEY, legacyToken);
+    sessionStorageRef.setItem(AUTH_TOKEN_KEY, legacyToken);
   }
-  legacyStorageRef.removeItem(ADMIN_TOKEN_KEY);
+  legacyStorageRef.removeItem(AUTH_TOKEN_KEY);
+  legacyStorageRef.removeItem("admin_token");
 
   return legacyToken;
 }
 
-export function clearAdminToken() {
+export function setAuthProfile(profile) {
+  const sessionStorageRef = getSessionStorage();
+  if (!sessionStorageRef) {
+    return;
+  }
+
+  sessionStorageRef.setItem(AUTH_PROFILE_KEY, JSON.stringify(profile || {}));
+}
+
+export function getAuthProfile() {
+  const sessionStorageRef = getSessionStorage();
+  if (!sessionStorageRef) {
+    return null;
+  }
+
+  const raw = sessionStorageRef.getItem(AUTH_PROFILE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn('Failed to parse auth profile:', error);
+    sessionStorageRef.removeItem(AUTH_PROFILE_KEY);
+    return null;
+  }
+}
+
+export function clearAuthSession() {
   const sessionStorageRef = getSessionStorage();
   const legacyStorageRef = getLegacyStorage();
 
   if (sessionStorageRef) {
-    sessionStorageRef.removeItem(ADMIN_TOKEN_KEY);
+    sessionStorageRef.removeItem(AUTH_TOKEN_KEY);
+    sessionStorageRef.removeItem(AUTH_PROFILE_KEY);
+    sessionStorageRef.removeItem("admin_token");
   }
 
   if (legacyStorageRef) {
-    legacyStorageRef.removeItem(ADMIN_TOKEN_KEY);
+    legacyStorageRef.removeItem(AUTH_TOKEN_KEY);
+    legacyStorageRef.removeItem(AUTH_PROFILE_KEY);
+    legacyStorageRef.removeItem("admin_token");
   }
 }
 
-export function setComputerAccess(operatorName) {
-  const sessionStorageRef = getSessionStorage();
-  if (!sessionStorageRef) {
-    return;
-  }
-
-  sessionStorageRef.setItem(COMPUTER_ACCESS_KEY, '1');
-  sessionStorageRef.setItem(COMPUTER_OPERATOR_NAME_KEY, String(operatorName || '').trim());
-}
-
-export function getComputerAccessGranted() {
-  const sessionStorageRef = getSessionStorage();
-  if (!sessionStorageRef) {
+export function hasCapability(capability, profile = getAuthProfile()) {
+  if (!capability || !profile || !Array.isArray(profile.capabilities)) {
     return false;
   }
 
-  return sessionStorageRef.getItem(COMPUTER_ACCESS_KEY) === '1';
+  return profile.capabilities.includes(capability);
+}
+
+export function hasAllCapabilities(capabilities, profile = getAuthProfile()) {
+  if (!Array.isArray(capabilities) || capabilities.length === 0) {
+    return true;
+  }
+
+  return capabilities.every((capability) => hasCapability(capability, profile));
+}
+
+export function setAdminToken(token) {
+  setAuthToken(token);
+}
+
+export function getAdminToken() {
+  return getAuthToken();
+}
+
+export function clearAdminToken() {
+  clearAuthSession();
+}
+
+export function setComputerAccess() {
+  // Deprecated: route access is now derived from authenticated capabilities.
+}
+
+export function getComputerAccessGranted() {
+  return hasCapability('computers.admin');
 }
 
 export function getComputerOperatorName() {
-  const sessionStorageRef = getSessionStorage();
-  if (!sessionStorageRef) {
-    return '';
-  }
-
-  return sessionStorageRef.getItem(COMPUTER_OPERATOR_NAME_KEY) || '';
+  return getAuthProfile()?.user_id || '';
 }
 
 export function clearComputerAccess() {
-  const sessionStorageRef = getSessionStorage();
-  if (!sessionStorageRef) {
-    return;
-  }
-
-  sessionStorageRef.removeItem(COMPUTER_ACCESS_KEY);
-  sessionStorageRef.removeItem(COMPUTER_OPERATOR_NAME_KEY);
+  clearAuthSession();
 }

@@ -1,11 +1,14 @@
 import { Router } from '../../js/router.js';
-import { API } from '../../js/api.js';
+import { API } from '../../js/api.js?v=20260707-1';
 import { escapeHtml } from '../../js/dom_utils.js';
 import {
-    clearComputerAccess,
-    getComputerOperatorName,
-    setComputerAccess
-} from '../../js/token.js';
+    clearAuthSession,
+    getAuthProfile,
+    hasCapability,
+    setAuthProfile,
+    setAuthToken
+} from '../../js/auth_session.js?v=20260707-1';
+import { runWithButtonLoading, setControlsDisabled } from '../../js/ui_loading.js';
 
 const computersState = {
     operatorName: '',
@@ -581,34 +584,74 @@ function renderComputerPartView() {
 function renderComputerMainView() {
     const operatorDisplay = document.getElementById('computer-operator-display');
     if (operatorDisplay) {
-        operatorDisplay.textContent = computersState.operatorName || getComputerOperatorName() || '-';
+        operatorDisplay.textContent = computersState.operatorName || getCurrentOperatorName() || '-';
     }
 }
 
+function getCurrentOperatorName() {
+    return String(getAuthProfile()?.user_id || '').trim();
+}
+
 window.ComputerController = {
-    login() {
-        const operatorName = getTrimmedInputValue('computer-operator-name');
-        const accessCode = getTrimmedInputValue('computer-access-code');
+    async login() {
+        const form = document.getElementById('form-computer-login');
+        const id = getTrimmedInputValue('computer-id');
+        const password = getTrimmedInputValue('computer-pass');
         const errorEl = document.getElementById('computer-login-error');
+        const controls = [
+            '#computer-id',
+            '#computer-pass',
+            '#computer-login-back-btn'
+        ];
 
         if (errorEl) {
             errorEl.textContent = '';
         }
 
-        if (!operatorName || !accessCode) {
+        if (!form || !form.reportValidity()) {
             if (errorEl) {
-                errorEl.textContent = '担当者名とアクセスコードを入力してください。';
+                errorEl.textContent = 'ログイン情報を入力してください。';
             }
             return;
         }
 
-        setComputerAccess(operatorName);
-        computersState.operatorName = operatorName;
-        Router.to('computer-main');
+        setControlsDisabled(controls, true);
+        try {
+            await runWithButtonLoading('#computer-login-btn', { busyText: 'ログイン中...' }, async () => {
+                const data = await API.auth.login({ id, password });
+                if (!data || !data.token) {
+                    if (errorEl) {
+                        errorEl.textContent = 'ログイン応答が不正です。';
+                    }
+                    return;
+                }
+
+                setAuthToken(data.token);
+                const me = await API.auth.me();
+                if (!hasCapability('computers.admin', me)) {
+                    clearAuthSession();
+                    if (errorEl) {
+                        errorEl.textContent = '計算機管理の管理者権限がありません。';
+                    }
+                    return;
+                }
+
+                setAuthProfile(me);
+                computersState.operatorName = String(me.user_id || '').trim();
+                Router.to('computer-main');
+            });
+        } catch (error) {
+            clearAuthSession();
+            if (errorEl) {
+                errorEl.textContent = getApiErrorMessage(error, 'ログインに失敗しました。');
+            }
+        } finally {
+            setControlsDisabled(controls, false);
+        }
     },
 
     logout() {
-        clearComputerAccess();
+        clearAuthSession();
         resetComputerModuleState({ keepReferences: false });
         Router.to('main-menu');
     },
@@ -933,15 +976,12 @@ window.ComputerController = {
 };
 
 export async function initComputers(view) {
-    computersState.operatorName = getComputerOperatorName();
+    computersState.operatorName = getCurrentOperatorName();
 
     if (view === 'login') {
         const errorEl = document.getElementById('computer-login-error');
         if (errorEl) {
             errorEl.textContent = '';
-        }
-        if (computersState.operatorName) {
-            setInputValue('computer-operator-name', computersState.operatorName);
         }
         return;
     }
