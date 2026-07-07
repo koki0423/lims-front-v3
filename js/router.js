@@ -1,4 +1,5 @@
 import { getAuthToken, hasAllCapabilities } from './auth_session.js?v=20260707-1';
+import { isMaintenanceModeEnabled } from './maintenance_mode.js';
 
 const MODULE_VERSION = '20260707-1';
 
@@ -17,6 +18,7 @@ const routes = {
     'main-menu': {
         path: 'modules/main/menu.html',
         title: 'メインメニュー',
+        allowDuringMaintenance: true,
         loader: loadMainMenuModule,
         init: (module) => module.initMainMenu()
     },
@@ -236,12 +238,14 @@ const routes = {
     'admin-login': {
         path: 'modules/admin/login.html',
         title: '管理者ログイン',
+        allowDuringMaintenance: true,
         loader: loadAdminModule,
         init: (module) => module.initAdmin('login')
     },
     'admin-main': {
         path: 'modules/admin/main_menu.html',
         title: '管理者メニュー',
+        allowDuringMaintenance: true,
         loginRoute: 'admin-login',
         requiredCapabilities: ['assets.admin'],
         loader: loadAdminModule,
@@ -250,6 +254,7 @@ const routes = {
     'admin-register': {
         path: 'modules/admin/register.html',
         title: '管理者追加登録',
+        allowDuringMaintenance: true,
         loginRoute: 'admin-login',
         requiredCapabilities: ['assets.admin'],
         loader: loadAdminModule,
@@ -257,6 +262,7 @@ const routes = {
     },
     'admin-genres': {
         path: 'modules/admin/genre_list.html', title: '備品ジャンル管理',
+        allowDuringMaintenance: true,
         loginRoute: 'admin-login',
         requiredCapabilities: ['assets.admin'],
         loader: loadAdminModule,
@@ -271,6 +277,11 @@ export const Router = {
     _historyStack: [],
     _currentRouteKey: '',
     _baseTitle: document.title || '備品管理システム',
+
+    _isBlockedByMaintenance(routeKey) {
+        const route = routes[routeKey];
+        return Boolean(route) && isMaintenanceModeEnabled() && !route.allowDuringMaintenance;
+    },
 
     async _loadTemplate(path) {
         if (this._templateCache.has(path)) {
@@ -295,6 +306,11 @@ export const Router = {
         if (!route) {
             console.error('Route not found:', routeKey);
             return;
+        }
+
+        if (this._isBlockedByMaintenance(resolvedRouteKey)) {
+            resolvedRouteKey = 'main-menu';
+            route = routes[resolvedRouteKey];
         }
 
         if (Array.isArray(route.requiredCapabilities) && route.requiredCapabilities.length > 0) {
@@ -379,6 +395,17 @@ export const Router = {
         }
 
         this.to(fallbackRouteKey, {
+            skipHistory: true,
+            replaceCurrent: true
+        });
+    },
+
+    enforceCurrentRouteAccess() {
+        if (!this._currentRouteKey || !this._isBlockedByMaintenance(this._currentRouteKey)) {
+            return;
+        }
+
+        this.to('main-menu', {
             skipHistory: true,
             replaceCurrent: true
         });
