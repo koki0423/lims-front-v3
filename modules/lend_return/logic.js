@@ -60,8 +60,6 @@ let isSubmittingReturn = false;
 let isSearchingLending = false;
 const lendAssetDetailsCache = new Map();
 const lendAssetDetailsRequestCache = new Map();
-const lendRecordCache = new Map();
-const lendRecordRequestCache = new Map();
 const historyFilterUiState = {
     lend: false,
     return: false
@@ -205,18 +203,6 @@ function getLendAssetName(item) {
 
 function getLendAssetSerial(item) {
     return normalizeTextValue(item?.serial || item?.asset_serial || item?.serial_number);
-}
-
-function getLendRecordKey(item) {
-    if (!item) {
-        return '';
-    }
-
-    if (item.lend_id !== undefined && item.lend_id !== null && item.lend_id !== '') {
-        return String(item.lend_id).trim();
-    }
-
-    return getLendKey(item);
 }
 
 function displayHistoryValue(value, fallback = '-') {
@@ -411,37 +397,6 @@ async function fetchRequiredLendAssetDetails(managementNumber) {
     return assetDetails;
 }
 
-async function fetchLendRecord(lendKey) {
-    const key = String(lendKey || '').trim();
-    if (key === '') {
-        return null;
-    }
-
-    if (lendRecordCache.has(key)) {
-        return lendRecordCache.get(key);
-    }
-
-    if (lendRecordRequestCache.has(key)) {
-        return lendRecordRequestCache.get(key);
-    }
-
-    const request = API.lending.getLend(key)
-        .then((response) => {
-            lendRecordCache.set(key, response);
-            return response;
-        })
-        .catch((error) => {
-            console.warn('fetchLendRecord error:', key, error);
-            return null;
-        })
-        .finally(() => {
-            lendRecordRequestCache.delete(key);
-        });
-
-    lendRecordRequestCache.set(key, request);
-    return request;
-}
-
 function mergeLendItemWithAssetDetails(item, assetDetails = null) {
     return {
         ...item,
@@ -475,30 +430,7 @@ async function enrichLendItemsWithAssetDetails(items) {
 }
 
 async function enrichReturnHistoryItems(items) {
-    const safeItems = Array.isArray(items) ? items : [];
-    const uniqueLendKeys = Array.from(
-        new Set(
-            safeItems
-                .map(getLendRecordKey)
-                .filter(value => value !== '')
-        )
-    );
-
-    await Promise.all(uniqueLendKeys.map(fetchLendRecord));
-
-    return safeItems.map(item => {
-        const lendRecord = lendRecordCache.get(getLendRecordKey(item));
-        if (!lendRecord) {
-            return item;
-        }
-
-        return {
-            ...item,
-            management_number: normalizeTextValue(item.management_number) || normalizeTextValue(lendRecord.management_number),
-            borrower_id: normalizeTextValue(item.borrower_id || item.borrower) || normalizeTextValue(lendRecord.borrower_id || lendRecord.borrower),
-            lent_at: item.lent_at || lendRecord.lent_at || null
-        };
-    });
+    return Array.isArray(items) ? items : [];
 }
 
 async function fetchAllHistoryItems(fetcher, params = {}) {
