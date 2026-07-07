@@ -3,6 +3,7 @@ import { API } from '../../js/api.js?v=20260707-1';
 import { AppState } from '../../js/app_state.js';
 import { escapeHtml } from '../../js/dom_utils.js';
 import { setAuthToken, setAuthProfile, clearAuthSession, hasCapability } from '../../js/auth_session.js?v=20260707-1';
+import { isMaintenanceModeEnabled, MAINTENANCE_MODE_KEY, setMaintenanceModeEnabled } from '../../js/maintenance_mode.js';
 import { confirmAction } from '../../js/ui_dialog.js';
 import { runWithButtonLoading, setControlsDisabled } from '../../js/ui_loading.js';
 import { hidePageFeedback, showApiPageFeedback, showPageFeedback } from '../../js/ui_feedback.js';
@@ -12,6 +13,7 @@ const adminState = {
     flash: null,
     genreLoading: false
 };
+let maintenanceStorageListenerBound = false;
 
 async function loadNfcReader() {
     return import('../../js/nfcReader.js');
@@ -67,6 +69,40 @@ function setGenreControlsLoading(isLoading) {
         '#genre-list-body .sm-btn',
         '#admin-genres-back-btn'
     ], isLoading);
+}
+
+function renderMaintenanceModeState() {
+    const status = document.getElementById('admin-maintenance-status');
+    const toggleButton = document.getElementById('admin-maintenance-toggle-btn');
+    if (!status || !toggleButton) {
+        return;
+    }
+
+    const isEnabled = isMaintenanceModeEnabled();
+    status.textContent = isEnabled
+        ? '現在は有効です。トップメニューでは管理者ログイン以外の操作を停止します。'
+        : '現在は無効です。トップメニューは通常どおり利用できます。';
+
+    toggleButton.textContent = isEnabled
+        ? 'メンテナンスモードをOFF'
+        : 'メンテナンスモードをON';
+    toggleButton.className = isEnabled ? 'primary-btn' : 'secondary-btn';
+}
+
+function bindMaintenanceStorageListener() {
+    if (maintenanceStorageListenerBound || typeof window === 'undefined') {
+        return;
+    }
+
+    window.addEventListener('storage', (event) => {
+        if (event.key && event.key !== MAINTENANCE_MODE_KEY) {
+            return;
+        }
+
+        renderMaintenanceModeState();
+    });
+
+    maintenanceStorageListenerBound = true;
 }
 
 window.AdminController = {
@@ -172,6 +208,36 @@ window.AdminController = {
         showPageFeedback('admin-main-feedback', 'マスタ編集は未実装です。必要に応じて機能追加します。', 'info');
     },
 
+    async toggleMaintenanceMode() {
+        const isEnabled = isMaintenanceModeEnabled();
+        const nextEnabled = !isEnabled;
+        const actionLabel = nextEnabled ? '有効化' : '解除';
+
+        const confirmed = await confirmAction({
+            title: 'メンテナンスモード確認',
+            message: nextEnabled
+                ? 'メンテナンスモードを有効化しますか？\nトップメニューでは管理者ログイン以外の操作が利用できなくなります。'
+                : 'メンテナンスモードを解除しますか？\nトップメニューの利用制限を解除します。',
+            confirmLabel: actionLabel,
+            cancelLabel: 'キャンセル',
+            tone: nextEnabled ? 'warning' : 'primary'
+        });
+
+        if (!confirmed) {
+            return;
+        }
+
+        setMaintenanceModeEnabled(nextEnabled);
+        renderMaintenanceModeState();
+        showPageFeedback(
+            'admin-main-feedback',
+            nextEnabled
+                ? 'メンテナンスモードを有効にしました。'
+                : 'メンテナンスモードを解除しました。',
+            'success'
+        );
+    },
+
     async submitRegister() {
         const form = document.getElementById('form-admin-reg');
         if (!form) {
@@ -233,6 +299,8 @@ window.AdminController = {
 
         if (view === 'main') {
             consumeAdminFlash('main', 'admin-main-feedback');
+            renderMaintenanceModeState();
+            bindMaintenanceStorageListener();
             return;
         }
 

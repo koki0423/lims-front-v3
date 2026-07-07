@@ -15,6 +15,13 @@
     background: #e9ecef;
 }
 
+.menu-btn:disabled {
+    color: #8a8f8c;
+    background: var(--disabled-bg-color);
+    cursor: not-allowed;
+    opacity: 0.75;
+}
+
 .menu-btn.primary {
     background: #555;
     color: #fff;
@@ -95,6 +102,20 @@ button.sm-btn {
 
 button.sm-btn:hover {
     background: #f3f7f4;
+}
+
+button.back-btn:disabled,
+button.next-btn:disabled,
+button.primary-btn:disabled,
+button.secondary-btn:disabled,
+button.sm-btn:disabled,
+.nfc-btn:disabled,
+.reader-btn:disabled {
+    color: #8a8f8c;
+    background: var(--disabled-bg-color);
+    border-color: #d2d7d3;
+    cursor: not-allowed;
+    opacity: 0.75;
 }
 
 .small-btn {
